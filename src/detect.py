@@ -30,7 +30,7 @@ except Exception:
 # =========================
 
 # Read-only bundle assets (models, etc.) — use sys._MEIPASS when frozen.
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     ROOT = Path(sys._MEIPASS)
 else:
     ROOT = Path(__file__).resolve().parent
@@ -45,16 +45,17 @@ REPORT_DIR = _DATA_DIR / "reports"
 PROCESSED_DIR = INPUT_DIR / "processed"
 CONVERTED_DIR = INPUT_DIR / "converted"
 
-FOOTPATH_MODEL = ROOT / "models" / "footpath_best.pt"
-ROAD_MODEL = ROOT / "models" / "road_evidence_best.pt"
-TRUNK_MODEL = ROOT / "models" / "trunk.pt"
-POLE_MODEL = ROOT / "models" / "pole.pt"
-TRAFFIC_LIGHT_MODEL = ROOT / "models" / "trafficlight.pt"
-ROAD_BARRIER_MODEL = ROOT / "models" / "road_barriers.pt"
-BIKE_LANE_MODEL = ROOT / "models" / "bike_lane.pt"
-TRAFFIC_SIGN_MODEL = ROOT / "models" / "traffic_sign.pt"
+FOOTPATH_MODEL = ROOT / ".." / "models" / "footpath_best.pt"
+ROAD_MODEL = ROOT / ".." / "models" / "road_evidence_best.pt"
+TRUNK_MODEL = ROOT / ".." / "models" / "trunk.pt"
+POLE_MODEL = ROOT / ".." / "models" / "pole.pt"
+TRAFFIC_LIGHT_MODEL = ROOT / ".." / "models" / "trafficlight.pt"
+ROAD_BARRIER_MODEL = ROOT / ".." / "models" / "road_barriers.pt"
+BIKE_LANE_MODEL = ROOT / ".." / "models" / "bike_lane.pt"
+TRAFFIC_SIGN_MODEL = ROOT / ".." / "models" / "traffic_sign.pt"
 
 SETTINGS_FILE = _DATA_DIR / "detection_settings.json"
+
 
 # Load per-model settings saved by detection_settings.py.
 # Returns an empty dict if the file does not exist or is corrupt.
@@ -191,18 +192,18 @@ TRAFFIC_SIGN_LABELS = {
 # OpenCV uses BGR color order.
 
 COLOR_MAP = {
-    "footpath": (0, 255, 0),              # green
-    "crosswalk_marking": (255, 0, 0),     # blue
-    "lane_marking": (0, 0, 255),          # red
-    "stop_line": (0, 255, 255),           # yellow
-    "trunk": (0, 165, 255),               # orange
-    "pole": (255, 0, 255),                # purple
-    "traffic_light": (255, 255, 0),       # cyan
-    "road_barrier": (255, 128, 0),        # light blue
-    "bike_lane": (128, 0, 255),           # violet
+    "footpath": (0, 255, 0),  # green
+    "crosswalk_marking": (255, 0, 0),  # blue
+    "lane_marking": (0, 0, 255),  # red
+    "stop_line": (0, 255, 255),  # yellow
+    "trunk": (0, 165, 255),  # orange
+    "pole": (255, 0, 255),  # purple
+    "traffic_light": (255, 255, 0),  # cyan
+    "road_barrier": (255, 128, 0),  # light blue
+    "bike_lane": (128, 0, 255),  # violet
 }
 
-TRAFFIC_SIGN_COLOR = (0, 128, 255)        # orange-like
+TRAFFIC_SIGN_COLOR = (0, 128, 255)  # orange-like
 
 
 # =========================
@@ -250,12 +251,10 @@ MODEL_CONFIGS = [
         "name": "traffic_light",
         "path": TRAFFIC_LIGHT_MODEL,
         "conf": TRAFFIC_LIGHT_CONF,
-
         # Do not force all YOLO default detections to traffic_light.
         # Only keep actual traffic light detections.
         "force_label": None,
         "allowed_labels": TRAFFIC_LIGHT_LABELS,
-
         "class_conf": None,
         "alpha": 0.45,
     },
@@ -281,12 +280,10 @@ MODEL_CONFIGS = [
         "name": "traffic_sign",
         "path": TRAFFIC_SIGN_MODEL,
         "conf": TRAFFIC_SIGN_CONF,
-
         # Keep original traffic sign class names.
         # Example: speed_limit, stop_sign, no_parking, warning.
         "force_label": None,
         "allowed_labels": TRAFFIC_SIGN_LABELS,
-
         # Apply per-class confidence for each traffic sign type.
         "class_conf": TRAFFIC_SIGN_CLASS_CONF,
         "alpha": 0.45,
@@ -297,6 +294,7 @@ MODEL_CONFIGS = [
 # =========================
 # Helper functions
 # =========================
+
 
 def save_report_csv_by_stem(report_stem, counts):
     """
@@ -353,7 +351,6 @@ def save_detection_details_csv(report_stem, rows):
         "confidence",
         "side_of_frame",
     ]
-    
 
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -361,6 +358,7 @@ def save_detection_details_csv(report_stem, rows):
         writer.writerows(rows)
 
     print(f"Detection details CSV saved: {csv_path}")
+
 
 def normalize_label_name(label):
     """
@@ -399,10 +397,7 @@ def normalize_conf_dict(conf_dict):
     if conf_dict is None:
         return None
 
-    return {
-        normalize_label_name(label): conf
-        for label, conf in conf_dict.items()
-    }
+    return {normalize_label_name(label): conf for label, conf in conf_dict.items()}
 
 
 def get_label_name(result, class_id):
@@ -445,6 +440,7 @@ def should_keep_detection(label, conf, class_conf=None):
     threshold = class_conf.get(label, 0.25)
     return conf >= threshold
 
+
 # Draw readable label text with black outline.
 # font_scale controls the OpenCV text size (default 0.55).
 def put_label(frame, text, x, y, color, font_scale=0.55):
@@ -482,7 +478,7 @@ def draw_masks_and_boxes(
     draw_contours=True,
     draw_boxes=True,
     class_conf=None,
-    font_scale=0.55,  
+    font_scale=0.55,
 ):
     """
     Draw YOLO result on frame.
@@ -566,17 +562,20 @@ def draw_masks_and_boxes(
                 cv2.drawContours(overlay, contours, -1, color, 4)
 
                 overlay[mask] = (
-                    0.65 * overlay[mask]
-                    + 0.35 * np.array(color, dtype=np.uint8)
+                    0.65 * overlay[mask] + 0.35 * np.array(color, dtype=np.uint8)
                 ).astype(np.uint8)
 
-            elif display_label in {
-                "trunk",
-                "pole",
-                "traffic_light",
-                "road_barrier",
-                "bike_lane",
-            } or display_label in TRAFFIC_SIGN_LABELS:
+            elif (
+                display_label
+                in {
+                    "trunk",
+                    "pole",
+                    "traffic_light",
+                    "road_barrier",
+                    "bike_lane",
+                }
+                or display_label in TRAFFIC_SIGN_LABELS
+            ):
                 overlay[mask] = (
                     (1 - alpha) * overlay[mask]
                     + alpha * np.array(color, dtype=np.uint8)
@@ -608,12 +607,7 @@ def draw_masks_and_boxes(
             x1, y1, x2, y2 = map(int, boxes.xyxy[i].tolist())
 
             put_label(
-                overlay,
-                f"{display_label} {conf:.2f}",
-                x1,
-                y1 - 6,
-                color,
-                font_scale
+                overlay, f"{display_label} {conf:.2f}", x1, y1 - 6, color, font_scale
             )
 
     # =========================
@@ -647,12 +641,7 @@ def draw_masks_and_boxes(
                 cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
 
             put_label(
-                overlay,
-                f"{display_label} {conf:.2f}",
-                x1,
-                y1 - 6,
-                color,
-                font_scale
+                overlay, f"{display_label} {conf:.2f}", x1, y1 - 6, color, font_scale
             )
 
     output = overlay
@@ -707,6 +696,7 @@ def get_output_path(file_path):
 #   Disabled models are skipped.
 #   At least one model must be enabled and present.
 
+
 def load_models():
     user_settings = load_user_settings()
     loaded_models = []
@@ -728,9 +718,7 @@ def load_models():
             effective_config["alpha"] = float(model_setting["alpha"])
 
         # font_scale defaults to 0.55 if not yet in the settings file
-        effective_config["font_scale"] = float(
-            model_setting.get("font_scale", 0.55)
-        )
+        effective_config["font_scale"] = float(model_setting.get("font_scale", 0.55))
 
         if not model_path.exists():
             print(f"{model_name} model not found, skipped: {model_path}")
@@ -745,10 +733,12 @@ def load_models():
         model = YOLO(str(model_path))
         print(f"{model_name} model classes: {model.names}")
 
-        loaded_models.append({
-            "config": effective_config,
-            "model": model,
-        })
+        loaded_models.append(
+            {
+                "config": effective_config,
+                "model": model,
+            }
+        )
 
     if not loaded_models:
         expected = "\\n".join(str(c["path"]) for c in MODEL_CONFIGS)
@@ -764,6 +754,7 @@ def load_models():
 # =========================
 # Core processing
 # =========================
+
 
 def process_frame(frame, loaded_models):
     """
@@ -823,6 +814,7 @@ def process_image(file_path, loaded_models):
 
     return True
 
+
 def frame_side(x1, x2, frame_width):
     """
     Simple estimate of where the object appears in the frame.
@@ -846,10 +838,7 @@ def find_closest_gps_point(target_time, gps_points):
     if not gps_points:
         return None
 
-    return min(
-        gps_points,
-        key=lambda p: abs((p["time"] - target_time).total_seconds())
-    )
+    return min(gps_points, key=lambda p: abs((p["time"] - target_time).total_seconds()))
 
 
 def get_gps_for_frame(frame_index, fps, gps_points):
@@ -886,6 +875,7 @@ def try_extract_gps_from_mov(file_path):
     except Exception as e:
         print(f"GPS extraction failed. Continuing without GPS. Reason: {e}")
         return []
+
 
 def try_extract_gps_from_gpx(gpx_path):
     """
@@ -926,10 +916,7 @@ def try_convert_insv_for_processing(file_path):
 
         clean_path = CONVERTED_DIR / f"{file_path.stem}_clean.mp4"
 
-        convert_mov_to_mp4(
-            str(file_path),
-            str(clean_path)
-        )
+        convert_mov_to_mp4(str(file_path), str(clean_path))
 
         print(f"INSV converted for processing: {clean_path}")
         return clean_path
@@ -937,6 +924,7 @@ def try_convert_insv_for_processing(file_path):
     except Exception as e:
         print(f"INSV conversion failed. Trying original INSV. Reason: {e}")
         return file_path
+
 
 def try_convert_mov_for_processing(file_path):
     """
@@ -953,10 +941,7 @@ def try_convert_mov_for_processing(file_path):
 
         clean_path = CONVERTED_DIR / f"{file_path.stem}_clean.mp4"
 
-        convert_mov_to_mp4(
-            str(file_path),
-            str(clean_path)
-        )
+        convert_mov_to_mp4(str(file_path), str(clean_path))
 
         print(f"MOV converted for processing: {clean_path}")
         return clean_path
@@ -970,12 +955,9 @@ def get_video_output_path(output_stem):
     OUTPUT_DIR.mkdir(exist_ok=True)
     return OUTPUT_DIR / f"detected_{output_stem}.mp4"
 
+
 def process_video(
-    file_path,
-    loaded_models,
-    gps_points=None,
-    source_file_path=None,
-    output_stem=None
+    file_path, loaded_models, gps_points=None, source_file_path=None, output_stem=None
 ):
     """
     Process one video file.
@@ -1046,9 +1028,7 @@ def process_video(
             result_frame = frame.copy()
 
             gps_point, frame_time_sec = get_gps_for_frame(
-                frame_index=frame_count,
-                fps=fps,
-                gps_points=gps_points
+                frame_index=frame_count, fps=fps, gps_points=gps_points
             )
 
             if frame_time_sec is None:
@@ -1064,7 +1044,7 @@ def process_video(
                     conf=config["conf"],
                     persist=True,
                     # Ultralystics library feature -> keep same ID for same object across frames
-                    tracker="bytetrack.yaml", 
+                    tracker="bytetrack.yaml",
                     save=False,
                     verbose=False,
                 )
@@ -1135,14 +1115,20 @@ def process_video(
                             "object_id": f"{display_label}_{track_id}",
                             "class_name": display_label,
                             "last_frame_time_sec": round(frame_time_sec, 3),
-                            "camera_latitude": gps_point["latitude"] if gps_point else "",
-                            "camera_longitude": gps_point["longitude"] if gps_point else "",
-                            "camera_elevation": gps_point["elevation"] if gps_point else "",
+                            "camera_latitude": (
+                                gps_point["latitude"] if gps_point else ""
+                            ),
+                            "camera_longitude": (
+                                gps_point["longitude"] if gps_point else ""
+                            ),
+                            "camera_elevation": (
+                                gps_point["elevation"] if gps_point else ""
+                            ),
                             "camera_speed": gps_point["speed"] if gps_point else "",
                             "camera_angle": gps_point["track"] if gps_point else "",
                             "confidence": round(conf, 4),
                             "side_of_frame": frame_side(x1, x2, VIDEO_SIZE[0]),
-                        }
+                        },
                     }
 
             last_result_frame = result_frame
@@ -1166,10 +1152,7 @@ def process_video(
         cv2.imwrite(str(snap_path), data["snapshot"])
         detail_rows.append(data["row"])
 
-    total_counts = {
-        label: len(ids)
-        for label, ids in seen_ids.items()
-    }
+    total_counts = {label: len(ids) for label, ids in seen_ids.items()}
 
     print(f"Video: {source_file_path.name}")
     print(f"Processed video file: {file_path.name}")
@@ -1207,6 +1190,7 @@ def move_to_processed(file_path):
 # =========================
 # Public detection function
 # =========================
+
 
 def run_detection(input_path, gpx_path=None, move_original=False):
     """
@@ -1269,7 +1253,7 @@ def run_detection(input_path, gpx_path=None, move_original=False):
             loaded_models=loaded_models,
             gps_points=gps_points,
             source_file_path=source_file_path,
-            output_stem=output_stem
+            output_stem=output_stem,
         )
 
     if success and move_original:
@@ -1286,12 +1270,10 @@ def process_all_uploads():
         raise FileNotFoundError(f"Input folder not found: {INPUT_DIR}")
 
     files = [
-        f for f in INPUT_DIR.iterdir()
+        f
+        for f in INPUT_DIR.iterdir()
         if f.is_file()
-        and (
-            f.suffix.lower() in IMAGE_EXTS
-            or f.suffix.lower() in VIDEO_EXTS
-        )
+        and (f.suffix.lower() in IMAGE_EXTS or f.suffix.lower() in VIDEO_EXTS)
     ]
 
     if not files:
@@ -1322,7 +1304,7 @@ def process_all_uploads():
                 loaded_models=loaded_models,
                 gps_points=gps_points,
                 source_file_path=file_path,
-                output_stem=file_path.stem
+                output_stem=file_path.stem,
             )
 
         if success:
@@ -1332,6 +1314,7 @@ def process_all_uploads():
 # =========================
 # Main script mode
 # =========================
+
 
 def main():
     """
@@ -1349,11 +1332,7 @@ def main():
         if len(sys.argv) >= 3:
             gpx_path = sys.argv[2]
 
-        run_detection(
-            input_path=input_path,
-            gpx_path=gpx_path,
-            move_original=False
-        )
+        run_detection(input_path=input_path, gpx_path=gpx_path, move_original=False)
 
     else:
         process_all_uploads()
