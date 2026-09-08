@@ -14,6 +14,10 @@ import shutil
 import platform
 from detection_settings import show_detection_settings
 
+#For geomapping: 
+import webbrowser
+import geo_mapping
+
 # =========================
 # Basic paths
 # =========================
@@ -702,6 +706,24 @@ def show_csv_preview(file_path, title="Report Preview", parent=None):
     dialog.setLayout(layout)
     dialog.exec()
 
+#show map implementation 
+def show_map(): 
+    csv_file = os.path.join(REPORT_FOLDER, "testing", "detection_details_with_gps.csv")
+
+    #if path is not exist: 
+    if not os.path.exists(csv_file):
+        QMessageBox.warning(window, "Map Error", f"CSV not found:\n{csv_file}")
+        return
+    try:
+        output_html = os.path.join(REPORT_FOLDER, "detection_map.html")
+        map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
+    except ValueError as e:
+        QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+        return
+    except Exception as e:
+        QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+        return
+    webbrowser.open(f"file://{map_path}")
 
 def browse_folder(folder_path, title, file_filter="All Files (*)"):
     os.makedirs(folder_path, exist_ok=True)
@@ -1092,6 +1114,11 @@ clear_result_btn = QPushButton("🗑 Clear Results")
 clear_result_btn.setFixedSize(130, 40)
 clear_result_btn.clicked.connect(clear_results)
 
+#Geolocation mapping button: 
+show_map_btn = QPushButton("🗺 Show Map")
+show_map_btn.setFixedSize(130, 40)
+show_map_btn.clicked.connect(show_map)
+
 button_style = (
     "QPushButton {background-color:white;color:black;border-radius:8px;}"
     "QPushButton:hover{background-color:#f0f0f0}"
@@ -1106,7 +1133,9 @@ for btn in [
     view_result_btn,
     clear_upload_btn,
     clear_result_btn,
-    settings_btn
+    settings_btn, 
+    #button for geo mapping: 
+    show_map_btn,
 ]:
     btn.setStyleSheet(button_style)
 
@@ -1124,6 +1153,8 @@ row1.addWidget(guide_btn)
 row1.setAlignment(Qt.AlignCenter)
 
 row2 = QHBoxLayout()
+#Show map button: 
+row2.addWidget(show_map_btn)
 row2.addWidget(view_upload_btn)
 row2.addWidget(view_result_btn)
 row2.addWidget(clear_upload_btn)

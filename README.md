@@ -255,7 +255,7 @@ If a `requirements.txt` file is added later, dependencies can also be installed 
 pip install -r requirements.txt
 ```
 
----
+--- to here
 
 ## 15. Current setup status
 
