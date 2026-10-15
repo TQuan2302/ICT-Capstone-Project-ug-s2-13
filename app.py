@@ -706,16 +706,28 @@ def show_csv_preview(file_path, title="Report Preview", parent=None):
     dialog.setLayout(layout)
     dialog.exec()
 
-#show map implementation 
-def show_map(): 
-    csv_file = os.path.join(REPORT_FOLDER, "testing", "detection_details_with_gps.csv")
+#show map start-point:  
+def show_map():
+    #Open the report folder to choose the .csv file: 
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+
+    csv_file, _ = QFileDialog.getOpenFileName(
+        window,
+        "Select Detection Report CSV",
+        REPORT_FOLDER,
+        "Detection GPS CSV (detection_details_with_gps.csv);;CSV Files (*.csv);;All Files (*)",
+    )
+    if not csv_file:
+        return
 
     #if path is not exist: 
     if not os.path.exists(csv_file):
         QMessageBox.warning(window, "Map Error", f"CSV not found:\n{csv_file}")
         return
     try:
-        output_html = os.path.join(REPORT_FOLDER, "detection_map.html")
+        # Save the map next to the chosen report so each video keeps its own HTML
+        report_dir = os.path.dirname(csv_file)
+        output_html = os.path.join(report_dir, "detection_map.html")
         map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
     except ValueError as e:
         QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")

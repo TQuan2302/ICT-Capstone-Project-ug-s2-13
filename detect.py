@@ -606,6 +606,8 @@ def draw_masks_and_boxes(
                     cv2.drawContours(overlay, contours, -1, color, 2)
 
             x1, y1, x2, y2 = map(int, boxes.xyxy[i].tolist())
+            
+
 
             put_label(
                 overlay,
@@ -1122,13 +1124,26 @@ def process_video(
                     seen_ids[display_label].add(track_id)
 
                     x1, y1, x2, y2 = map(int, boxes.xyxy[i].tolist())
+                    # Use red for every snapshot box/label regardless of class - for visualization purpose
+                    box_color = (0, 0, 255)
+
+                    # Draw box + label on this object's last-seen frame
+                    snapshot = frame.copy()
+                    cv2.rectangle(snapshot, (x1, y1), (x2, y2), box_color, 2)
+                    put_label(
+                        snapshot,
+                        f"{display_label} {conf:.2f}", #Draw confident level
+                        x1, #position of the lable horizontally
+                        y1 - 6, #position of the lable vertically  - 6 pixels above the top edge
+                        box_color,
+                    )
 
                     # Always overwrite with the current frame's data.
                     # On first detection this creates the entry.
                     # On every subsequent detection this updates it with
                     # fresher GPS so the final entry holds the last frame.
                     last_seen_data[(display_label, track_id)] = {
-                        "snapshot": frame.copy(),
+                        "snapshot": snapshot,
                         "row": {
                             "source_file": source_file_path.name,
                             "processed_file": file_path.name,
