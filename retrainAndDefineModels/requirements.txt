@@ -1,0 +1,8 @@
+PySide6
+opencv-python
+ultralytics
+imageio-ffmpeg
+numpy
+matplotlib
+torch
+pytest
