@@ -17,6 +17,7 @@ from detection_settings import show_detection_settings
 #For geomapping: 
 import webbrowser
 import geo_mapping
+import combined_map
 
 # =========================
 # Basic paths
@@ -737,6 +738,42 @@ def show_map():
         return
     webbrowser.open(f"file://{map_path}")
 
+# One map for every video report. The HTML is saved in the reports folder.
+def build_all_videos_map(reports_folder):
+    output_html = os.path.join(reports_folder, "all_detections_map.html")
+    return combined_map.build_map_from_reports(reports_folder, output_html)
+
+# Open the saved combined map, or build it when a video CSV is newer.
+def show_all_maps():
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+    reports_folder = REPORT_FOLDER
+    try:
+        map_path = build_all_videos_map(reports_folder)
+    except PermissionError:
+        # macOS blocked the known Documents path, so ask once.
+        reports_folder = QFileDialog.getExistingDirectory(
+            window,
+            "Select the reports folder",
+            REPORT_FOLDER,
+        )
+        if not reports_folder:
+            return
+        try:
+            map_path = build_all_videos_map(reports_folder)
+        except ValueError as e:
+            QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+            return
+        except Exception as e:
+            QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+            return
+    except ValueError as e:
+        QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+        return
+    except Exception as e:
+        QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+        return
+    webbrowser.open(f"file://{map_path}")
+
 def browse_folder(folder_path, title, file_filter="All Files (*)"):
     os.makedirs(folder_path, exist_ok=True)
 
@@ -1131,6 +1168,10 @@ show_map_btn = QPushButton("🗺 Show Map")
 show_map_btn.setFixedSize(130, 40)
 show_map_btn.clicked.connect(show_map)
 
+show_all_maps_btn = QPushButton("🗺 All Videos")
+show_all_maps_btn.setFixedSize(130, 40)
+show_all_maps_btn.clicked.connect(show_all_maps)
+
 button_style = (
     "QPushButton {background-color:white;color:black;border-radius:8px;}"
     "QPushButton:hover{background-color:#f0f0f0}"
@@ -1148,6 +1189,7 @@ for btn in [
     settings_btn, 
     #button for geo mapping: 
     show_map_btn,
+    show_all_maps_btn,
 ]:
     btn.setStyleSheet(button_style)
 
@@ -1167,6 +1209,7 @@ row1.setAlignment(Qt.AlignCenter)
 row2 = QHBoxLayout()
 #Show map button: 
 row2.addWidget(show_map_btn)
+row2.addWidget(show_all_maps_btn)
 row2.addWidget(view_upload_btn)
 row2.addWidget(view_result_btn)
 row2.addWidget(clear_upload_btn)

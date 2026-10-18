@@ -28,7 +28,10 @@ def retrieve_info(point):
             f"<br>confidence score: {point['confidence']}"
             f"<br>({point['latitude']:.6f}, {point['longitude']:.6f})"
         )
-    
+    source_video = point.get("source_video")
+    if source_video:
+        html_file = html_file + f"<br>video: {source_video}"
+
     data_uri = point.get("snapshot_data_uri")
 
     #Generate the html onbject for the snapshot and add it to html_file
@@ -48,7 +51,7 @@ def retrieve_info(point):
 #Returns a list of dicts in the form of:
 #[{"lat": float, "lon": float, "class_name": str, "object_id": str, "confidence": str}, ...]
 
-def read_csv_input(csv_path):
+def read_csv_input(csv_path, encode_snapshots=True):
     
     csv_path = Path(csv_path)
     if not csv_path.exists():
@@ -82,7 +85,10 @@ def read_csv_input(csv_path):
                 "confidence": clean_text(row,"confidence"),
             }
 
-            point["snapshot_data_uri"] = image_to_data_uri(snapshot_path_for_point(point, csv_path))
+            if encode_snapshots:
+                point["snapshot_data_uri"] = image_to_data_uri(snapshot_path_for_point(point, csv_path))
+            else:
+                point["snapshot_data_uri"] = None
 
             points.append(point)
     return points
@@ -248,10 +254,13 @@ def build_map(points, output_html, selected_classes=None):
         color = assign_color_for_class(p["class_name"], color_map)
         popup_html = retrieve_info(p)
         class_layer = get_class_layer(p["class_name"], cluster, class_layers, folium_map)
+        tooltip = p["class_name"]
+        if p.get("source_video"):
+            tooltip = f"{p['class_name']} ({p['source_video']})"
         marker = folium.Marker(
             location=[p["latitude"], p["longitude"]],
             popup=folium.Popup(popup_html, max_width=470),
-            tooltip=p["class_name"],
+            tooltip=tooltip,
             icon=folium.Icon(color=color, icon="info-sign"),
             confidence=confidence_value,
         )
