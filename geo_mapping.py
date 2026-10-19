@@ -283,8 +283,20 @@ def build_map(points, output_html, selected_classes=None):
     return str(output_html)
 
 
-#Entry point function: Calling read_csv_input and build_map
+# True when this video's saved HTML is newer than its CSV, so nothing needs rebuilding.
+def map_html_is_current(csv_path, output_html):
+    output_html = Path(output_html)
+    csv_path = Path(csv_path)
+    if not output_html.is_file() or not csv_path.is_file():
+        return False
+    return csv_path.stat().st_mtime_ns <= output_html.stat().st_mtime_ns
+
+
+#Entry point function: Calling read_csv_input and build_map.
+#Opens the saved detection_map.html when it is already newer than this video's CSV.
 def build_map_from_csv(csv_path, output, selected_classes=None):
+    if not selected_classes and map_html_is_current(csv_path, output):
+        return str(output)
 
     points = read_csv_input(csv_path)
     map = build_map(points, output, selected_classes=selected_classes)
