@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import (
     QApplication, QPushButton, QFileDialog, QWidget, QLabel,
     QVBoxLayout, QHBoxLayout, QDialog, QTextEdit, QMessageBox,
-    QProgressBar, QSlider
+    QProgressBar, QSlider, QInputDialog
 )
-from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QStandardPaths
+from PySide6.QtGui import QFont, QPixmap, QImage, QPainter, QPen, QColor, QCursor
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QStandardPaths, QPoint, QRect, QSize
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
@@ -12,7 +12,15 @@ import sys
 import os
 import shutil
 import platform
+import cv2
+from datetime import datetime
 from detection_settings import show_detection_settings
+from roadsight_paths import (
+    seed_runtime_data,
+    install_shutdown_sync,
+    sync_runtime_data_back,
+)
+
 
 # =========================
 # Basic paths
@@ -32,11 +40,13 @@ UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
 RESULT_FOLDER = os.path.join(DATA_DIR, "results")
 REPORT_FOLDER = os.path.join(DATA_DIR, "reports")
 INPUT_FOLDER = os.path.join(DATA_DIR, "testing resource")
+FEEDBACK_FOLDER = os.path.join(DATA_DIR, "feedback")
 
 os.makedirs(INPUT_FOLDER, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 os.makedirs(REPORT_FOLDER, exist_ok=True)
+os.makedirs(FEEDBACK_FOLDER, exist_ok=True)
 
 
 # =========================
@@ -313,6 +323,247 @@ def show_text_preview(file_path, title="File Preview", parent=None):
     dialog.setLayout(layout)
     dialog.exec()
 
+## USER FEEDBACK
+
+class AnnotationCanvas(QWidget):
+
+    def __init__(self, source_image: QImage, parent=None):
+        super().__init__(parent)
+
+        self.source_image = source_image
+        self.boxes = []
+        self.drag_start = None
+        self.drag_current = None
+        self.setCursor(QCursor(Qt.CrossCursor))
+        self.setMouseTracking(True)
+        self._display_pixmap = QPixmap()
+        self._update_display_pixmap()
+
+    def _update_display_pixmap(self):
+
+        target_size = self.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            target_size = QSize(self.source_image.width(), self.source_image.height())
+
+        self._display_pixmap = QPixmap.fromImage(self.source_image).scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.setMinimumSize(1,1)
+        self.update()
+
+    def resizeEvent(self, event):
+        self._update_display_pixmap()
+        super().resizeEvent(event)
+
+    def _image_offset(self):
+        x = (self.width() - self._display_pixmap.width()) // 2
+        y = (self.height() - self._display_pixmap.height()) // 2
+        return QPoint(x,y)
+
+    def _scale_to_source(self):
+        if self._display_pixmap.width() == 0:
+            return 1.0
+        return self.source_image.width() / self._display_pixmap.width()
+
+    def _clamp_to_pixmap(self, pos: QPoint) -> QPoint:
+        offset = self._image_offset()
+        x = min(max(pos.x(), offset.x()), offset.x() + self._display_pixmap.width())
+        y = min(max(pos.y(), offset.y()), offset.y() + self._display_pixmap.height())
+        return QPoint(x,y)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start = self._clamp_to_pixmap(event.pos())
+            self.drag_current = self.drag_start
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        if self.drag_start is not None:
+            self.drag_current = self._clamp_to_pixmap(event.pos())
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.drag_start is not None:
+            rect = QRect(self.drag_start, self.drag_current).normalized()
+
+            if rect.width() >= 5 and rect.height() >= 5:
+                self.boxes.append(rect)
+
+            self.drag_start = None
+            self.drag_current = None
+            self.update()
+
+    def undo_last_box(self):
+        if self.boxes:
+            self.boxes.pop()
+            self.update()
+
+    def clear_boxes(self):
+        self.boxes = []
+        self.update()
+
+    def has_boxes(self):
+        return len(self.boxes) > 0
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#202020"))
+        offset = self._image_offset()
+        painter.drawPixmap(offset, self._display_pixmap)
+        pen = QPen(QColor("#ff3b30"))
+        pen.setWidth(3)
+        painter.setPen(pen)
+
+        for rect in self.boxes:
+            painter.drawRect(rect)
+
+        if self.drag_start is not None and self.drag_current is not None:
+            preview_pen = QPen(QColor("#ffd60a"))
+            preview_pen.setWidth(2)
+            preview_pen.setStyle(Qt.DashLine)
+            painter.setPen(preview_pen)
+            painter.drawRect(QRect(self.drag_start, self.drag_current).normalized())
+
+        painter.end()
+
+    def render_annotated_image(self) -> QImage:
+        result = self.source_image.copy()
+        scale = self._scale_to_source()
+        offset = self._image_offset()
+        painter = QPainter(result)
+        pen = QPen(QColor("#ff3b30"))
+        pen.setWidth(max(2, round(3 * scale)))
+        painter.setPen(pen)
+
+        for rect in self.boxes:
+            source_rect = QRect(
+                round((rect.x() - offset.x()) * scale),
+                round((rect.y() - offset.y()) * scale),
+                round(rect.width() * scale),
+                round(rect.height() * scale),
+            )
+            painter.drawRect(source_rect)
+
+        painter.end()
+        return result
+
+RESULT_PREFIX = "detected_"
+
+def resolve_clean_source_video(displayed_path):
+
+    filename = os.path.basename(displayed_path)
+
+    if not filename.lower().startswith(RESULT_PREFIX):
+        return displayed_path
+
+    stem = os.path.splitext(filename[len(RESULT_PREFIX):])[0]
+
+    if not os.path.isdir(UPLOAD_FOLDER):
+        return displayed_path
+
+    for candidate in os.listdir(UPLOAD_FOLDER):
+        candidate_stem, candidate_ext = os.path.splitext(candidate)
+        if candidate_stem == stem and candidate_ext.lower() in VIDEO_EXTENSIONS:
+            return os.path.join(UPLOAD_FOLDER, candidate)
+
+    return displayed_path
+
+def grab_clean_frame(video_path, position_ms) -> QImage:
+
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        return QImage()
+    try:
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(position_ms,0))
+        ok, frame_bgr = cap.read()
+    finally:
+        cap.release()
+
+    if not ok or frame_bgr is None:
+        return QImage()
+
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    height, width, channels = frame_rgb.shape
+    bytes_per_line = channels * width
+
+    return QImage(
+        frame_rgb.data, width, height, bytes_per_line, QImage.Format_RGB888
+    ).copy()
+
+
+
+def open_feedback_annotation_dialog(frame_image: QImage, video_path, position_ms, parent=None):
+
+        dialog = QDialog(parent or window)
+        dialog.setWindowTitle("Flag Missing Object")
+        dialog.resize(900, 650)
+
+        layout = QVBoxLayout()
+
+        instructions = QLabel("Click and drag to draw a box around any object the detector missed. "
+                              "You can draw more than one box before saving"
+        )
+        instructions.setWordWrap(True)
+        instructions.setStyleSheet("color: black; font-size: 12px;")
+        layout.addWidget(instructions)
+
+        canvas = AnnotationCanvas(frame_image)
+        layout.addWidget(canvas, stretch = 1)
+
+        controls = QHBoxLayout()
+        undo_btn = QPushButton("Undo Last Box")
+        clear_btn = QPushButton("Clear All")
+        cancel_btn = QPushButton("Cancel")
+        save_btn = QPushButton("Save Screenshot")
+
+        for btn in [undo_btn, clear_btn, cancel_btn, save_btn]:
+            btn.setFixedSize(150, 40)
+            btn.setStyleSheet(
+                "QPushButton {background-color:white;color:black;border-radius:8px;}"
+                "QPushButton:hover{background-color:#f0f0f0}"
+            )
+
+        controls.addWidget(undo_btn)
+        controls.addWidget(clear_btn)
+        controls.addWidget(cancel_btn)
+        controls.addWidget(save_btn)
+        controls.setAlignment(Qt.AlignCenter)
+        layout.addLayout(controls)
+
+        dialog.setLayout(layout)
+
+        undo_btn.clicked.connect(canvas.undo_last_box)
+        clear_btn.clicked.connect(canvas.clear_boxes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        def do_save():
+            if not canvas.has_boxes():
+                QMessageBox.warning(
+                    dialog,
+                    "No Boxes Drawn",
+                    "Draw at least one rectangle around a missing object before saving"
+                )
+                return
+
+            annotated = canvas.render_annotated_image()
+
+            video_stem = os.path.splitext(os.path.basename(video_path))[0]
+            total_seconds = max(position_ms, 0) // 1000
+            frame_time = f"{total_seconds // 60:02d}m{total_seconds % 60:02d}s"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{video_stem}_{frame_time}_{timestamp}.png"
+            save_path = os.path.join(FEEDBACK_FOLDER, filename)
+            os.makedirs(FEEDBACK_FOLDER, exist_ok=True)
+
+            if not annotated.save(save_path, "PNG"):
+                QMessageBox.critical(dialog, "Save Failed", f"Could not save screenshot to:\n{save_path}")
+                return
+
+            QMessageBox.information(dialog, "Saved", f"Feedback screenshot saved to:\n{save_path}")
+            dialog.accept()
+
+        save_btn.clicked.connect(do_save)
+        dialog.exec()
+
 
 def show_video_preview(file_path, title="Video Preview", parent=None):
     dialog = QDialog(parent or window)
@@ -379,10 +630,14 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
 
     play_btn = QPushButton("Play")
     pause_btn = QPushButton("Pause")
+    flag_btn = QPushButton("Flag Missing Object")
     close_btn = QPushButton("Close")
 
-    for btn in [play_btn, pause_btn, close_btn]:
-        btn.setFixedSize(100, 40)
+    ## for btn in [play_btn, pause_btn, close_btn]:
+    ##    btn.setFixedSize(100, 40)
+
+    for btn in [play_btn, pause_btn, flag_btn, close_btn]:
+        btn.setFixedSize(160 if btn is flag_btn else 100, 40)
         btn.setStyleSheet(
             "QPushButton {background-color:white;color:black;border-radius:8px;}"
             "QPushButton:hover{background-color:#f0f0f0}"
@@ -390,6 +645,7 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
 
     controls.addWidget(play_btn)
     controls.addWidget(pause_btn)
+    controls.addWidget(flag_btn)
     controls.addWidget(close_btn)
     controls.setAlignment(Qt.AlignCenter)
 
@@ -411,6 +667,48 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
     # Keep references alive.
     dialog.player = player
     dialog.audio_output = audio_output
+
+
+    clean_source_path = resolve_clean_source_video(file_path)
+    showing_annotated_source = (clean_source_path == file_path) and \
+        os.path.basename(file_path).lower().startswith(RESULT_PREFIX)
+
+
+    def flag_missing_object():
+        player.pause()
+
+        frame_image = grab_clean_frame(clean_source_path, player.position())
+
+        if frame_image.isNull():
+            frame_image = video_widget.grab().toImage()
+            if showing_annotated_source:
+                QMessageBox.warning(
+                    dialog,
+                    "Raw Video Not Found",
+                    "Could not find the original un-annotated upload, so this "
+                    "screenshot may still show detection boxes. If you still "
+                    "have the original file, re-upload it before flagging"
+                )
+
+
+
+        if frame_image.isNull():
+            QMessageBox.warning(
+                dialog,
+                "No Frame Available",
+                "Could not capture the current video frame. Try again after the video has started playing"
+            )
+            return
+
+        open_feedback_annotation_dialog(
+            frame_image,
+            file_path,
+            player.position(),
+            parent=dialog
+        )
+
+    flag_btn.clicked.connect(flag_missing_object)
+
 
     # =========================
     # Helper function
@@ -744,6 +1042,9 @@ def view_results():
 def view_reports():
     browse_folder(REPORT_FOLDER, "View Reports")
 
+def view_feedback():
+    browse_folder(FEEDBACK_FOLDER, "View Flagged Screenshots")
+
 
 # =========================
 # Clear folders
@@ -774,6 +1075,10 @@ def clear_uploads():
 def clear_results():
     clear_folder(RESULT_FOLDER)
     QMessageBox.information(window, "Results Cleared", "All files in results folder have been deleted.")
+
+def clear_feedback():
+    clear_folder(FEEDBACK_FOLDER)
+    QMessageBox.information(window, "Feedback Cleared", "All flagged screenshots have been deleted.")
 
 
 # =========================
@@ -1092,6 +1397,14 @@ clear_result_btn = QPushButton("🗑 Clear Results")
 clear_result_btn.setFixedSize(130, 40)
 clear_result_btn.clicked.connect(clear_results)
 
+view_feedback_btn = QPushButton("View Feedback")
+view_feedback_btn.setFixedSize(130, 40)
+view_feedback_btn.clicked.connect(view_feedback)
+
+clear_feedback_btn = QPushButton("Clear Feedback")
+clear_feedback_btn.setFixedSize(130, 40)
+clear_feedback_btn.clicked.connect(clear_feedback)
+
 button_style = (
     "QPushButton {background-color:white;color:black;border-radius:8px;}"
     "QPushButton:hover{background-color:#f0f0f0}"
@@ -1106,6 +1419,8 @@ for btn in [
     view_result_btn,
     clear_upload_btn,
     clear_result_btn,
+    view_feedback_btn,
+    clear_feedback_btn,
     settings_btn
 ]:
     btn.setStyleSheet(button_style)
@@ -1128,6 +1443,8 @@ row2.addWidget(view_upload_btn)
 row2.addWidget(view_result_btn)
 row2.addWidget(clear_upload_btn)
 row2.addWidget(clear_result_btn)
+row2.addWidget(view_feedback_btn)
+row2.addWidget(clear_feedback_btn)
 row2.setAlignment(Qt.AlignCenter)
 
 main_layout.addLayout(row1)
