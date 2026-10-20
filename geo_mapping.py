@@ -236,7 +236,7 @@ def build_map(points, output_html, selected_classes=None):
     avg_lon = sum(p["longitude"] for p in points) / len(points)
 
     
-    # Esri's street map allows that and does not need an API key.
+    # test Esri map: 
     folium_map = folium.Map(
         location=[avg_lat, avg_lon],
         zoom_start=12,
