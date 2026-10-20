@@ -18,6 +18,8 @@ from detection_settings import show_detection_settings
 import webbrowser
 import geo_mapping
 import combined_map
+import subprocess
+from pathlib import Path
 
 # =========================
 # Basic paths
@@ -736,8 +738,17 @@ def show_map():
     except Exception as e:
         QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
         return
-    webbrowser.open(f"file://{map_path}")
-
+    
+    # Here we will open it slightly differently if we're on windows
+    
+    # webbrowser.open(f"file://{map_path}")
+    
+    if "microsoft" in platform.release().lower():  # WSL
+        windows_path = r"\\wsl.localhost\Ubuntu" + str(Path(map_path).resolve()).replace("/", "\\")
+        subprocess.Popen(["explorer.exe", windows_path])
+    else:
+        webbrowser.open(Path(map_path).resolve().as_uri())
+    
 # One map for every video report. The HTML is saved in the reports folder.
 def build_all_videos_map(reports_folder):
     output_html = os.path.join(reports_folder, "all_detections_map.html")
