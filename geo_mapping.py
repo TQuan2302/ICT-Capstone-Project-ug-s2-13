@@ -235,8 +235,13 @@ def build_map(points, output_html, selected_classes=None):
     avg_lat = sum(p["latitude"] for p in points) / len(points)
     avg_lon = sum(p["longitude"] for p in points) / len(points)
 
-    #Set the location of the map at center of all points calculated above:  
-    folium_map = folium.Map(location=[avg_lat, avg_lon], zoom_start=12)
+    
+    # Esri's street map allows that and does not need an API key.
+    folium_map = folium.Map(
+        location=[avg_lat, avg_lon],
+        zoom_start=12,
+        tiles="Esri.WorldStreetMap",
+    )
 
     # Shared cluster so overlapping pins still group; LayerControl lists each class.
     cluster = MarkerCluster(control=False)
