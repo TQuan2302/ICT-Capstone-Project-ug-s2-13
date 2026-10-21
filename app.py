@@ -756,8 +756,12 @@ def build_all_videos_map(reports_folder):
 
 # Open the saved combined map, or build it when a video CSV is newer.
 def show_all_maps():
+    
+    # Create the report directory
     os.makedirs(REPORT_FOLDER, exist_ok=True)
     reports_folder = REPORT_FOLDER
+    
+    # build the map of all observed places:
     try:
         map_path = build_all_videos_map(reports_folder)
     except PermissionError:
@@ -783,7 +787,16 @@ def show_all_maps():
     except Exception as e:
         QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
         return
-    webbrowser.open(f"file://{map_path}")
+    
+    
+    # Here we will open it slightly differently if we're on windows
+        
+    if "microsoft" in platform.release().lower():  # WSL
+        windows_path = r"\\wsl.localhost\Ubuntu" + str(Path(map_path).resolve()).replace("/", "\\")
+        subprocess.Popen(["explorer.exe", windows_path])
+    else:
+        webbrowser.open(Path(map_path).resolve().as_uri())
+
 
 def browse_folder(folder_path, title, file_filter="All Files (*)"):
     os.makedirs(folder_path, exist_ok=True)
@@ -1175,11 +1188,11 @@ clear_result_btn.setFixedSize(130, 40)
 clear_result_btn.clicked.connect(clear_results)
 
 #Geolocation mapping button: 
-show_map_btn = QPushButton("🗺 Show Map")
+show_map_btn = QPushButton("🗺 Show One Map")
 show_map_btn.setFixedSize(130, 40)
 show_map_btn.clicked.connect(show_map)
 
-show_all_maps_btn = QPushButton("🗺 All Videos")
+show_all_maps_btn = QPushButton("🗺 Show All Maps")
 show_all_maps_btn.setFixedSize(130, 40)
 show_all_maps_btn.clicked.connect(show_all_maps)
 

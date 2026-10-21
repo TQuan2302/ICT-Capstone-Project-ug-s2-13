@@ -10,6 +10,8 @@ from pathlib import Path
 import geo_mapping
 import snapshot_cache
 
+import locationsa
+
 # GPS detail file written for each processed video.
 DETAILS_CSV_NAME = "detection_details_with_gps.csv"
 
@@ -90,6 +92,11 @@ def read_all_report_csvs(reports_folder):
     for csv_path in csv_paths:
         video_points = geo_mapping.read_csv_input(csv_path, encode_snapshots=False)
         points.extend(attach_cached_snapshots(video_points, csv_path, reports_folder))
+        
+    # the below is a temporary proof of concept, to show that we are indeed able to plot API points on the map
+    points = points + locationsa.getRandomStatePoints()
+    
+    print(list(points[0]))
 
     if not points:
         raise ValueError("No data to map, csv file coordinates empty")

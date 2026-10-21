@@ -250,7 +250,8 @@ def build_map(points, output_html, selected_classes=None):
 
     color_map = {}
     tracked_markers = []
-    for p in points:
+    for p in points:        
+            
         try:
             confidence_value = float(p["confidence"])
         except ValueError:
