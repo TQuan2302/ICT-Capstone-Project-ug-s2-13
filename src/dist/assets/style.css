@@ -1,0 +1,8 @@
+.selectable-table tr:has(.row-checkbox:checked) {
+  background-color: var(--bs-table-active-bg, #e9ecef);
+  color: var(--bs-table-active-color);
+}
+
+.table-opaque {
+  --bs-bg-opacity: 0.0;
+}
