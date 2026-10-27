@@ -30,6 +30,11 @@ function render_detections_for_file(file_name) {
         });
         body.appendChild(tr);
       });
+    } else {
+      const message = document.createElement('h3');
+      message.textContent = "There are no detections associated with the selected file";
+      message.className = "text-secondary";
+      detections_table.appendChild(message);
     }
 
     detections_table.appendChild(body);

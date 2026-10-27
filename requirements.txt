@@ -6,5 +6,6 @@ numpy
 matplotlib
 torch
 pytest
-fastapi
+fastapi[standard]
 pandas
+pytesseract
