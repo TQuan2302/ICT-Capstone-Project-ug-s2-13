@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en" class="vh-100">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoadSight</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+
+<body class="h-100">
+  <div class="d-flex flex-column vh-100">
+
+    <header>
+    <div class="px-3 py-2 text-bg-dark border-bottom">
+      <div class="container">
+        <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+          <a href="/" class="d-flex align-items-center my-2 my-lg-0 me-lg-auto text-white text-decoration-none">
+            <svg class="bi me-2" width="40" height="32" role="img" aria-label="Bootstrap">
+              <use xlink:href="#bootstrap"></use>
+            </svg>
+          </a>
+          <ul class="nav col-12 col-lg-auto my-2 justify-content-center my-md-0 text-small">
+            <li>
+              <a href="/" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#home"></use>
+                </svg>
+                Home
+              </a>
+            </li>
+            <li>
+              <a href="/detections" class="nav-link text-secondary">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#table"></use>
+                </svg>
+                Detections
+              </a>
+            </li>
+            <li>
+              <a href="/preview" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#speedometer2"></use>
+                </svg>
+                Preview
+              </a>
+            </li>
+            <li>
+              <a href="/map" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#grid"></use>
+                </svg>
+                Map
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </header>
+
+    <div class="container-fluid text-center py-md-2 h-100">
+      <div class="row h-100">
+        <div class="col-md-4 h-100">
+          <div class="container h-100">
+            <div class="p-3 text-center bg-body-secondary rounded-3 shadow-sm h-100">
+              <h3 class="fw-bold">Processed Videos</h3>
+              <div class="table-responsive border rounded-3 overflow-auto">
+                <table class="table table-sm table-hover table-opaque m-0" id="detections">
+                  <thead>
+                    <tr>
+                      <th scope="col">Video Name</th>
+                      <th scope="col">Upload Date</th>
+                    </tr>
+                  </thead>
+                  <tbody class="table-group-divider" id="processed_table">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-8 h-100">
+          <div class="container h-100">
+            <div class="p-3 text-center bg-body-secondary rounded-3 shadow-sm h-100">
+              <h3 class="fw-bold">Video Detections</h3>
+              <video controls width="800">
+                <source src="/preview-stream/1mnt_sample" type="video/mp4">
+              </video>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CDN imports for bootstrap (for page styling) -->
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
+    integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r"
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"
+    integrity="sha384-G/EV+4j2dNv+tEPo3++6LCgdCROaejBqfUeNjuKAiuXbjrxilcCdDz6ZAVfHWe1Y"
+    crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/4.0.0/jquery.min.js"
+    integrity="sha512-8LENNbXmzI/Gbj+OwXmqR6V4QaUAw0/porPzy1+dQoJqC0JPHedWoe0DDOTL2uHA5XXJyIsPtiMHH86pVlay6A=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="/assets/detections.js"></script>
+</body>
+
+</html>

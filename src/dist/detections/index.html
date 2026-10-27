@@ -15,52 +15,52 @@
   <div class="d-flex flex-column vh-100">
 
     <header>
-      <div class="px-3 py-2 text-bg-dark border-bottom">
-        <div class="container">
-          <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-            <a href="/" class="d-flex align-items-center my-2 my-lg-0 me-lg-auto text-white text-decoration-none">
-              <svg class="bi me-2" width="40" height="32" role="img" aria-label="Bootstrap">
-                <use xlink:href="#bootstrap"></use>
-              </svg>
-            </a>
-            <ul class="nav col-12 col-lg-auto my-2 justify-content-center my-md-0 text-small">
-              <li>
-                <a href="/" class="nav-link text-white">
-                  <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
-                    <use xlink:href="#home"></use>
-                  </svg>
-                  Home
-                </a>
-              </li>
-              <li>
-                <a href="/upload" class="nav-link text-white">
-                  <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
-                    <use xlink:href="#speedometer2"></use>
-                  </svg>
-                  Uploads
-                </a>
-              </li>
-              <li>
-                <a href="/detections" class="nav-link text-secondary">
-                  <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
-                    <use xlink:href="#table"></use>
-                  </svg>
-                  Detections
-                </a>
-              </li>
-              <li>
-                <a href="/map" class="nav-link text-white">
-                  <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
-                    <use xlink:href="#grid"></use>
-                  </svg>
-                  Map
-                </a>
-              </li>
-            </ul>
-          </div>
+    <div class="px-3 py-2 text-bg-dark border-bottom">
+      <div class="container">
+        <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+          <a href="/" class="d-flex align-items-center my-2 my-lg-0 me-lg-auto text-white text-decoration-none">
+            <svg class="bi me-2" width="40" height="32" role="img" aria-label="Bootstrap">
+              <use xlink:href="#bootstrap"></use>
+            </svg>
+          </a>
+          <ul class="nav col-12 col-lg-auto my-2 justify-content-center my-md-0 text-small">
+            <li>
+              <a href="/" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#home"></use>
+                </svg>
+                Home
+              </a>
+            </li>
+            <li>
+              <a href="/detections" class="nav-link text-secondary">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#table"></use>
+                </svg>
+                Detections
+              </a>
+            </li>
+            <li>
+              <a href="/preview" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#speedometer2"></use>
+                </svg>
+                Preview
+              </a>
+            </li>
+            <li>
+              <a href="/map" class="nav-link text-white">
+                <svg class="bi d-block mx-auto mb-1" width="24" height="24" aria-hidden="true">
+                  <use xlink:href="#grid"></use>
+                </svg>
+                Map
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
-    </header>
+    </div>
+  </header>
 
     <div class="container-fluid text-center py-md-2 h-100">
       <div class="row h-100">
@@ -87,32 +87,9 @@
           <div class="container h-100">
             <div class="p-3 text-center bg-body-secondary rounded-3 shadow-sm h-100">
               <h3 class="fw-bold">Video Detections</h3>
-              <div class="table-responsive border rounded-3 overflow-hidden">
-                <table class="table table-sm table-striped table-hover table-opaque m-0" id="detections">
-                  <thead>
-                    <tr>
-                      <th scope="col">Class Name</th>
-                      <th scope="col">Object ID</th>
-                      <th scope="col">Last Frame Time</th>
-                      <th scope="col">Confidence</th>
-                    </tr>
-                  </thead>
+              <div class="table-responsive border rounded-3 overflow-auto" style="max-height: 85%;">
+                <table class="table table-sm table-striped table-hover table-opaque m-0" id="detections_table">
                   <tbody class="table-group-divider">
-                    <tr>
-                      <td>First First</td>
-                      <td>First Second</td>
-                      <td>First Third</td>
-                    </tr>
-                    <tr>
-                      <td>Second First</td>
-                      <td>Second Second</td>
-                      <td>Second Third</td>
-                    </tr>
-                    <tr>
-                      <td>Third First</td>
-                      <td>Third Second</td>
-                      <td>Third Third</td>
-                    </tr>
                   </tbody>
                 </table>
               </div>

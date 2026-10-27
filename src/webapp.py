@@ -6,11 +6,12 @@ import time
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from fastapi import APIRouter, FastAPI, UploadFile, status, HTTPException
+from fastapi import FastAPI, Header, UploadFile, status, HTTPException, Request
+from fastapi.responses import FileResponse
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
-
-from json import loads, dumps
+from io import BytesIO
+from json import loads
 
 from detection_settings import show_detection_settings
 from roadsight_paths import (
@@ -162,21 +163,44 @@ async def get_detections_list():
     return dir_info_list
 
 @app.get("/detections/{file_name}")
-async def get_detections(file_name):
+async def get_detections(file_name: str):
     report_path = Path(REPORT_FOLDER) / str(file_name)
 
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="Report not found")
+    
     report = report_path / "detection_report.csv"
     details = report_path / "detection_details_with_gps.csv"
 
     detection_object = {}
     if report.exists():
         detection_object["report"] = loads(pd.read_csv(report).to_json(orient="records"))
+    else:
+        raise HTTPException(status_code=404, detail="Report not found")
     
     if details.exists():
         detection_object["details"] = loads(pd.read_csv(details).to_json(orient="records"))
-
+    else:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
     return detection_object
 
+# =========================
+# Endpoints for viewing detection videos
+# =========================
+@app.get("/preview-stream/{file_name}")
+async def stream_video(file_name: str, request: Request):
+    video_path = Path(RESULT_FOLDER) / f"detected_{file_name}.mp4"
+
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    # FileResponse handles Range headers (206 Partial Content) automatically
+    return FileResponse(
+        video_path,
+        media_type="video/mp4",
+        filename=video_path.name
+    )
 
 # =========================
 # Static file hosting for the web-based interface

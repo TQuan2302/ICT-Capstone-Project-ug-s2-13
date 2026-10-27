@@ -1,9 +1,38 @@
-
 function render_detections_for_file(file_name) {
-  let detections_table = document.getElementById("detections_table");
+  const detections_table = document.getElementById("detections_table");
 
   $.get(`/detections/${file_name}`, function (data) {
-    console.log(data);
+    detections_table.replaceChildren();
+
+    const body = document.createElement('tbody');
+    body.className = "table-group-divider";
+
+    if (data['details'].length > 0) {
+      column_categories = Object.keys(data['details'][0]);
+
+      const head = document.createElement('thead');
+      const header = document.createElement('tr');
+
+      column_categories.forEach(name => {
+        const th = document.createElement('th');
+        th.textContent = name;
+        header.appendChild(th);
+      });
+      head.appendChild(header);
+      detections_table.appendChild(head);
+
+      data['details'].forEach(detection => {
+        const tr = document.createElement('tr');
+        column_categories.forEach(category => {
+          td = document.createElement('td');
+          td.textContent = detection[category];
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    }
+
+    detections_table.appendChild(body);
   });
 }
 
