@@ -12,6 +12,12 @@ import sys
 import os
 import shutil
 import platform
+import subprocess
+import webbrowser
+from pathlib import Path
+
+import combined_map
+import geo_mapping
 from detection_settings import show_detection_settings
 from roadsight_paths import (
     seed_runtime_data,
@@ -715,6 +721,78 @@ def show_csv_preview(file_path, title="Report Preview", parent=None):
     dialog.exec()
 
 
+def open_map_html(map_path):
+    # WSL needs Windows Explorer. A normal browser open works on macOS and Linux.
+    if "microsoft" in platform.release().lower():
+        windows_path = r"\\wsl.localhost\Ubuntu" + str(Path(map_path).resolve()).replace("/", "\\")
+        subprocess.Popen(["explorer.exe", windows_path])
+    else:
+        webbrowser.open(Path(map_path).resolve().as_uri())
+
+
+def show_map():
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+
+    csv_file, _ = QFileDialog.getOpenFileName(
+        window,
+        "Select Detection Report CSV",
+        REPORT_FOLDER,
+        "Detection GPS CSV (detection_details_with_gps.csv);;CSV Files (*.csv);;All Files (*)",
+    )
+    if not csv_file:
+        return
+
+    if not os.path.exists(csv_file):
+        QMessageBox.warning(window, "Map Error", f"CSV not found:\n{csv_file}")
+        return
+    try:
+        report_dir = os.path.dirname(csv_file)
+        output_html = os.path.join(report_dir, "detection_map.html")
+        map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
+    except ValueError as e:
+        QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+        return
+    except Exception as e:
+        QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+        return
+
+    open_map_html(map_path)
+
+
+def show_all_maps():
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+    reports_folder = REPORT_FOLDER
+
+    try:
+        output_html = os.path.join(reports_folder, "all_detections_map.html")
+        map_path = combined_map.build_map_from_reports(reports_folder, output_html)
+    except PermissionError:
+        reports_folder = QFileDialog.getExistingDirectory(
+            window,
+            "Select the reports folder",
+            REPORT_FOLDER,
+        )
+        if not reports_folder:
+            return
+        try:
+            output_html = os.path.join(reports_folder, "all_detections_map.html")
+            map_path = combined_map.build_map_from_reports(reports_folder, output_html)
+        except ValueError as e:
+            QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+            return
+        except Exception as e:
+            QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+            return
+    except ValueError as e:
+        QMessageBox.warning(window, "No GPS Data", f"Could not build map:\n{e}")
+        return
+    except Exception as e:
+        QMessageBox.warning(window, "Map Error", f"Could not build map:\n{e}")
+        return
+
+    open_map_html(map_path)
+
+
 def browse_folder(folder_path, title, file_filter="All Files (*)"):
     os.makedirs(folder_path, exist_ok=True)
 
@@ -1109,6 +1187,14 @@ clear_result_btn = QPushButton("🗑 Clear Results")
 clear_result_btn.setFixedSize(130, 40)
 clear_result_btn.clicked.connect(clear_results)
 
+show_map_btn = QPushButton("🗺 Show One Map")
+show_map_btn.setFixedSize(150, 40)
+show_map_btn.clicked.connect(show_map)
+
+show_all_maps_btn = QPushButton("🗺 Show All Maps")
+show_all_maps_btn.setFixedSize(150, 40)
+show_all_maps_btn.clicked.connect(show_all_maps)
+
 button_style = (
     "QPushButton {background-color:white;color:black;border-radius:8px;}"
     "QPushButton:hover{background-color:#f0f0f0}"
@@ -1124,7 +1210,9 @@ for btn in [
     clear_upload_btn,
     clear_result_btn,
     settings_btn,
-    retrain_btn
+    retrain_btn,
+    show_map_btn,
+    show_all_maps_btn,
 ]:
     btn.setStyleSheet(button_style)
 
@@ -1149,8 +1237,14 @@ row2.addWidget(clear_upload_btn)
 row2.addWidget(clear_result_btn)
 row2.setAlignment(Qt.AlignCenter)
 
+row3 = QHBoxLayout()
+row3.addWidget(show_map_btn)
+row3.addWidget(show_all_maps_btn)
+row3.setAlignment(Qt.AlignCenter)
+
 main_layout.addLayout(row1)
 main_layout.addLayout(row2)
+main_layout.addLayout(row3)
 
 footer = QLabel("© 2026 RoadSight | Group 13")
 footer.setFont(QFont("Arial", 12))

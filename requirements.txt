@@ -9,3 +9,6 @@ pytest
 fastapi[standard]
 pandas
 pytesseract
+folium
+branca
+requests

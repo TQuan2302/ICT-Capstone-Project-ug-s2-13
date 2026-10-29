@@ -13,6 +13,8 @@ from watchdog.events import PatternMatchingEventHandler
 from io import BytesIO
 from json import loads
 
+import combined_map
+import geo_mapping
 from detection_settings import show_detection_settings
 from roadsight_paths import (
     seed_runtime_data,
@@ -201,6 +203,64 @@ async def stream_video(file_name: str, request: Request):
         media_type="video/mp4",
         filename=video_path.name
     )
+
+# =========================
+# Endpoints for detection maps
+# =========================
+
+@app.get("/map-list")
+def get_map_list():
+    target = Path(REPORT_FOLDER)
+    if not target.is_dir():
+        return []
+
+    dir_info_list = []
+    for directory in target.iterdir():
+        if not directory.is_dir() or directory.name.startswith("."):
+            continue
+        if not (directory / "detection_details_with_gps.csv").is_file():
+            continue
+        dir_info_list.append(
+            {
+                "name": directory.name,
+                "date": datetime.fromtimestamp(directory.stat().st_mtime).strftime(
+                    "%d/%m/%Y %H:%M"
+                ),
+            }
+        )
+    dir_info_list.sort(key=lambda item: item["name"].lower())
+    return dir_info_list
+
+
+@app.get("/map/all")
+def show_all_maps():
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+    output_html = os.path.join(REPORT_FOLDER, "all_detections_map.html")
+    try:
+        map_path = combined_map.build_map_from_reports(REPORT_FOLDER, output_html)
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(map_path, media_type="text/html")
+
+
+@app.get("/map/{file_name}")
+def show_one_map(file_name: str):
+    reports_root = Path(REPORT_FOLDER).resolve()
+    report_dir = (reports_root / file_name).resolve()
+    if report_dir != reports_root and reports_root not in report_dir.parents:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    csv_file = report_dir / "detection_details_with_gps.csv"
+    if not csv_file.is_file():
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    output_html = report_dir / "detection_map.html"
+    try:
+        map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(map_path, media_type="text/html")
+
 
 # =========================
 # Static file hosting for the web-based interface
