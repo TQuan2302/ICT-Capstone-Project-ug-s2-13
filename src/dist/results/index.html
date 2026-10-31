@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoadSight results</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+
+<body>
+  <header>
+    <div class="px-3 py-2 text-bg-dark border-bottom">
+      <div class="container">
+        <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+          <a href="/" class="d-flex align-items-center my-2 my-lg-0 me-lg-auto text-white text-decoration-none fw-bold">
+            RoadSight
+          </a>
+          <ul class="nav col-12 col-lg-auto my-2 justify-content-center my-md-0">
+            <li><a href="/" class="nav-link text-white">Home</a></li>
+            <li><a href="/results/" class="nav-link text-secondary">Results</a></li>
+            <li><a href="/retrain/" class="nav-link text-white">Retrain</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="container py-3">
+    <div class="p-3 bg-body-secondary rounded-3 shadow-sm mb-3">
+      <h1 class="h3">Finished detections</h1>
+      <p class="text-secondary">Select a file to see its result reports and detected video.</p>
+      <div class="border rounded-3 bg-white">
+        <table class="table table-sm table-hover m-0">
+          <thead>
+            <tr>
+              <th scope="col">File</th>
+              <th scope="col">Uploaded</th>
+            </tr>
+          </thead>
+          <tbody id="processed_table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="p-3 bg-body-secondary rounded-3 shadow-sm">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <h2 class="h3 mb-0">Results</h2>
+        <div class="d-flex gap-2">
+          <a id="report_csv_link" class="btn btn-outline-primary btn-sm" hidden download>Counts Report</a>
+          <a id="details_csv_link" class="btn btn-outline-primary btn-sm" hidden download>Detection Details</a>
+        </div>
+      </div>
+
+      <h3 class="h6">Counts Report</h3>
+      <div class="spreadsheet border rounded-3 bg-white mb-3">
+        <table class="table table-sm table-bordered m-0" id="counts_table"></table>
+      </div>
+
+      <h3 class="h6">Detection details</h3>
+      <div class="spreadsheet border rounded-3 bg-white mb-4">
+        <table class="table table-sm table-bordered m-0" id="detections_table"></table>
+      </div>
+
+      <h3 class="h6">Detected file</h3>
+      <video id="detected_video" class="w-100 rounded" controls
+        style="max-height: 480px; background: #111; display: none;"></video>
+      <img id="detected_image" class="img-fluid rounded" alt="Detected result"
+        style="max-height: 480px; display: none;">
+    </div>
+  </div>
+
+  <script src="/assets/detections.js?v=2"></script>
+</body>
+
+</html>
+
+
+<!-- References: this script has been written with the help of AI (chatgpt, Claude, Grok) -->

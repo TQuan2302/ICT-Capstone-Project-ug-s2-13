@@ -1,0 +1,92 @@
+RoadSight retrain data flow
+============================
+
+Step 1 - When the app launches, it makes these folders
+-------------------------------------------------------
+
+Documents/RoadSight
+|-- models
+|-- uploads
+|-- results
+|-- reports
+|-- testing resource
+|-- retrain
+    |-- bike_lane
+    |-- speed_advisory_sign
+    |-- speed_limit_sign
+        |-- live_weight
+        |-- feedback
+            |-- images
+            |-- labels
+        |-- old_data
+            |-- images
+            |-- labels
+        |-- val
+            |-- images
+            |-- labels
+
+Step 2 - Copy weights into live_weight
+---------------------------------------
+
+projectFolder/models/<model>.pt is copied to:
+
+  Documents/RoadSight/models/<model>.pt
+  Documents/RoadSight/retrain/<model>/live_weight/<model>.pt
+
+Step 3 - Copy old training data
+-------------------------------
+
+projectFolder/dataset/<model>/train/images
+  -> Documents/RoadSight/retrain/<model>/old_data/images
+
+projectFolder/dataset/<model>/train/labels
+  -> Documents/RoadSight/retrain/<model>/old_data/labels
+
+Step 4 - Copy validation data
+-----------------------------
+
+projectFolder/dataset/<model>/val/images
+  -> Documents/RoadSight/retrain/<model>/val/images
+
+projectFolder/dataset/<model>/val/labels
+  -> Documents/RoadSight/retrain/<model>/val/labels
+
+Step 5 - Train
+--------------
+
+Training starts from live_weight/<model>.pt.
+If there is no live weight yet, training starts from yolov8n.pt.
+
+old_data and feedback are copied together into yolo_split and used as the
+training set. val stays frozen and is used only for scoring.
+
+Training output is stored in retrain/<model>/runs.
+
+Step 6 - Test on val
+--------------------
+
+The new model and the current live model are both scored on val.
+The score used for the decision is mAP.
+
+It shows the two scores and asks user to Keep or Discard.
+
+  Keep:
+    copy the new weights into live_weight and into Documents/RoadSight/models
+    move feedback images and labels into old_data only when that filename
+    is not already there. A matching name is dropped, not saved as a copy.
+    clear feedback
+    copy the updated files back into the project folder (same as Step 7)
+
+  Discard:
+    leave live weights and feedback unchanged
+
+Step 7 - When the app closes
+----------------------------
+
+Changed Documents files are copied back into the project folder:
+
+  live_weight/<model>.pt
+    -> projectFolder/models/<model>.pt
+
+  retrain/<model>/old_data
+    -> projectFolder/dataset/<model>/train
