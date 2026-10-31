@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import (
     QApplication, QPushButton, QFileDialog, QWidget, QLabel,
     QVBoxLayout, QHBoxLayout, QDialog, QTextEdit, QMessageBox,
-    QProgressBar, QSlider
+    QProgressBar, QSlider, QInputDialog
 )
-from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtCore import Qt, QThread, Signal, QUrl, QStandardPaths
+from PySide6.QtGui import QFont, QPixmap, QImage, QPainter, QPen, QColor, QCursor
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QStandardPaths, QPoint, QRect, QSize
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 
@@ -12,13 +12,19 @@ import sys
 import os
 import shutil
 import platform
+import cv2
+import numpy as np
+from datetime import datetime
 from detection_settings import show_detection_settings
 from roadsight_paths import (
     seed_runtime_data,
     install_shutdown_sync,
     sync_runtime_data_back,
 )
+
 from retrain_window import show_retrain_window
+from train import MODEL_META, get_paths
+
 
 # =========================
 # Basic paths
@@ -30,6 +36,7 @@ if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 DATA_DIR = str(seed_runtime_data())
 install_shutdown_sync()
@@ -43,6 +50,22 @@ os.makedirs(INPUT_FOLDER, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 os.makedirs(REPORT_FOLDER, exist_ok=True)
+
+
+# =========================
+# Feedback classes
+# =========================
+
+FEEDBACK_MODELS = {meta["name"]: meta for meta in MODEL_META}
+
+FEEDBACK_CLASS_NAMES = [
+    class_name for meta in MODEL_META for class_name in meta["class_names"]
+]
+FEEDBACK_CLASS_TO_MODEL = {
+    class_name: meta["name"]
+    for meta in MODEL_META
+    for class_name in meta["class_names"]
+}
 
 
 # =========================
@@ -273,15 +296,36 @@ def show_image_preview(file_path, title="Image Preview", parent=None):
 
     layout.addWidget(image_label)
 
+    controls = QHBoxLayout()
+
+    flag_btn = QPushButton("Flag Missing Object")
     close_btn = QPushButton("Close")
-    close_btn.setFixedSize(100, 40)
-    close_btn.setStyleSheet(
-        "QPushButton {background-color:white;color:black;border-radius:8px;}"
-        "QPushButton:hover{background-color:#f0f0f0}"
-    )
+
+    for btn in [flag_btn, close_btn]:
+        btn.setFixedSize(160 if btn is flag_btn else 100, 40)
+        btn.setStyleSheet(
+            "QPushButton {background-color:white;color:black;border-radius:8px;}"
+            "QPushButton:hover{background-color:#f0f0f0}"
+        )
+
+    controls.addWidget(flag_btn)
+    controls.addWidget(close_btn)
+    controls.setAlignment(Qt.AlignCenter)
+    layout.addLayout(controls)
+
+    can_flag = is_inside_folder(file_path, RESULT_FOLDER) or \
+        is_inside_folder(file_path, UPLOAD_FOLDER)
+    flag_btn.setVisible(can_flag)
+
+    clean_source_path = resolve_clean_source(file_path, IMAGE_EXTENSIONS)
+
+    def flag_missing_object():
+        flag_frame(dialog, file_path, clean_source_path, load_clean_image, "image")
+
+    flag_btn.clicked.connect(flag_missing_object)
+
     close_btn.clicked.connect(dialog.close)
 
-    layout.addWidget(close_btn, alignment=Qt.AlignCenter)
 
     dialog.setLayout(layout)
     dialog.exec()
@@ -318,6 +362,411 @@ def show_text_preview(file_path, title="File Preview", parent=None):
 
     dialog.setLayout(layout)
     dialog.exec()
+
+## USER FEEDBACK
+
+class AnnotationCanvas(QWidget):
+
+    def __init__(self, source_image: QImage, class_provider=None, parent=None):
+        super().__init__(parent)
+
+        self.source_image = source_image
+        self.class_provider = class_provider
+        self.boxes = []
+        self.box_classes = []
+        self.drag_start = None
+        self.drag_current = None
+        self.setCursor(QCursor(Qt.CrossCursor))
+        self.setMouseTracking(True)
+        self._display_pixmap = QPixmap()
+        self._update_display_pixmap()
+
+    def _update_display_pixmap(self):
+
+        target_size = self.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            target_size = QSize(self.source_image.width(), self.source_image.height())
+
+        self._display_pixmap = QPixmap.fromImage(self.source_image).scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.setMinimumSize(1,1)
+        self.update()
+
+    def resizeEvent(self, event):
+        self._update_display_pixmap()
+        super().resizeEvent(event)
+
+    def _image_offset(self):
+        x = (self.width() - self._display_pixmap.width()) // 2
+        y = (self.height() - self._display_pixmap.height()) // 2
+        return QPoint(x, y)
+
+    def _scale_to_source(self):
+        if self._display_pixmap.width() == 0:
+            return 1.0
+        return self.source_image.width() / self._display_pixmap.width()
+
+    def _clamp_to_pixmap(self, pos: QPoint) -> QPoint:
+        offset = self._image_offset()
+        x = min(max(pos.x(), offset.x()), offset.x() + self._display_pixmap.width())
+        y = min(max(pos.y(), offset.y()), offset.y() + self._display_pixmap.height())
+        return QPoint(x, y)
+
+    @staticmethod
+    def _rect_from_points(p1: QPoint, p2: QPoint) -> QRect:
+        return QRect(
+            QPoint(min(p1.x(), p2.x()), min(p1.y(), p2.y())),
+            QPoint(max(p1.x(), p2.x()), max(p1.y(), p2.y())),
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start = self._clamp_to_pixmap(event.pos())
+            self.drag_current = self.drag_start
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        if self.drag_start is not None:
+            self.drag_current = self._clamp_to_pixmap(event.pos())
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.drag_start is not None:
+            rect = self._rect_from_points(self.drag_start, self.drag_current)
+
+            self.drag_start = None
+            self.drag_current = None
+            self.update()
+
+            if rect.width() >= 5 and rect.height() >= 5:
+                class_name = self.class_provider() if self.class_provider else "object"
+
+                if class_name:
+                    self.boxes.append(rect)
+                    self.box_classes.append(class_name)
+                    self.update()
+
+    def undo_last_box(self):
+        if self.boxes:
+            self.boxes.pop()
+            self.box_classes.pop()
+            self.update()
+
+    def clear_boxes(self):
+        self.boxes = []
+        self.box_classes = []
+        self.update()
+
+    def has_boxes(self):
+        return len(self.boxes) > 0
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#202020"))
+        offset = self._image_offset()
+        painter.drawPixmap(offset, self._display_pixmap)
+        pen = QPen(QColor("#ff3b30"))
+        pen.setWidth(3)
+        painter.setPen(pen)
+
+        for rect, class_name in zip(self.boxes, self.box_classes):
+            painter.drawRect(rect)
+
+            text_y = rect.y() - 4 if rect.y() > 16 else rect.y() + 14
+            painter.drawText(rect.x() + 2, text_y, class_name)
+
+        if self.drag_start is not None and self.drag_current is not None:
+            preview_pen = QPen(QColor("#ffd60a"))
+            preview_pen.setWidth(2)
+            preview_pen.setStyle(Qt.DashLine)
+            painter.setPen(preview_pen)
+            painter.drawRect(self._rect_from_points(self.drag_start, self.drag_current))
+
+        painter.end()
+
+    def get_labelled_boxes(self):
+        scale = self._scale_to_source()
+        offset = self._image_offset()
+
+        img_w = self.source_image.width()
+        img_h = self.source_image.height()
+
+        result = []
+        for rect, class_name in zip(self.boxes, self.box_classes):
+            x_min = round((rect.left() - offset.x()) * scale)
+            y_min = round((rect.top() - offset.y()) * scale)
+            x_max = round((rect.right() + 1 - offset.x()) * scale)
+            y_max = round((rect.bottom() + 1 - offset.y()) * scale)
+
+            x_min = min(max(x_min, 0), img_w)
+            x_max = min(max(x_max, 0), img_w)
+            y_min = min(max(y_min, 0), img_h)
+            y_max = min(max(y_max, 0), img_h)
+
+            result.append((x_min, y_min, x_max, y_max, class_name))
+
+        return result
+
+RESULT_PREFIX = "detected_"
+
+def resolve_clean_source(displayed_path, extensions, check_converted=False):
+
+    filename = os.path.basename(displayed_path)
+
+    if not filename.lower().startswith(RESULT_PREFIX):
+        return displayed_path
+
+    stem = os.path.splitext(filename[len(RESULT_PREFIX):])[0]
+
+    if not os.path.isdir(UPLOAD_FOLDER):
+        return displayed_path
+
+    if check_converted:
+        converted_clean = os.path.join(UPLOAD_FOLDER, "converted", stem + "_clean.mp4")
+        if os.path.isfile(converted_clean):
+            return converted_clean
+
+    for candidate in os.listdir(UPLOAD_FOLDER):
+        candidate_stem, candidate_ext = os.path.splitext(candidate)
+        if candidate_stem == stem and candidate_ext.lower() in extensions:
+            return os.path.join(UPLOAD_FOLDER, candidate)
+
+    return displayed_path
+
+def frame_to_qimage(frame_bgr) -> QImage:
+    if frame_bgr is None:
+        return QImage()
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    height, width, channels = frame_rgb.shape
+    bytes_per_line = channels * width
+
+    return QImage(
+        frame_rgb.data, width, height, bytes_per_line, QImage.Format_RGB888
+    ).copy()
+
+def grab_clean_frame(video_path, position_ms) -> QImage:
+
+    cap = cv2.VideoCapture(video_path)
+
+    if not cap.isOpened():
+        return QImage()
+    try:
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(position_ms,0))
+        ok, frame_bgr = cap.read()
+    finally:
+        cap.release()
+
+    if not ok:
+        return QImage()
+
+    return frame_to_qimage(frame_bgr)
+
+def load_clean_image(image_path) -> QImage:
+    try:
+        data = np.fromfile(image_path, dtype=np.uint8)
+        frame_bgr = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    except OSError:
+        return QImage()
+
+    return frame_to_qimage(frame_bgr)
+
+def is_inside_folder(file_path, folder):
+    try:
+        return os.path.commonpath(
+            [os.path.abspath(file_path), os.path.abspath(folder)]
+        ) == os.path.abspath(folder)
+    except ValueError:
+        return False
+
+def flag_frame(dialog, file_path, clean_source_path, load_frame, noun, position_ms=None):
+    frame_image = load_frame(clean_source_path)
+    used_annotated = False
+
+    if frame_image.isNull() and clean_source_path != file_path:
+        frame_image = load_frame(file_path)
+        used_annotated = not frame_image.isNull()
+
+    if frame_image.isNull():
+        QMessageBox.warning(
+            dialog,
+            "No Frame Available",
+            f"Could not read this {noun}."
+        )
+        return
+
+    showing_annotated_source = (clean_source_path == file_path) and \
+        os.path.basename(file_path).lower().startswith(RESULT_PREFIX)
+
+    if used_annotated or showing_annotated_source:
+        QMessageBox.warning(
+            dialog,
+            f"Original {noun.capitalize()} Not Found",
+            f"Could not read the original un-annoted {noun}, so this "
+            "screenshot may still show detection boxes. If you still "
+            " have the original file, re-upload it before flagging"
+        )
+
+    open_feedback_annotation_dialog(
+        frame_image,
+        file_path,
+        position_ms,
+        parent=dialog
+    )
+
+def box_to_yolo(x_min, y_min, x_max, y_max, img_w, img_h):
+    x_center = ((x_min + x_max) / 2) / img_w
+    y_center = ((y_min + y_max) / 2) / img_h
+    width = (x_max - x_min) / img_w
+    height = (y_max - y_min) / img_h
+    return x_center, y_center, width, height
+
+def save_feedback_sample(frame_image: QImage, labelled_boxes, video_path, position_ms=None):
+
+    video_stem = os.path.splitext(os.path.basename(video_path))[0]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if position_ms is None:
+        stem = f"{video_stem}_{timestamp}"
+    else:
+        total_seconds = max(position_ms, 0) // 1000
+        frame_time = f"{total_seconds // 60:02d}m{total_seconds % 60:02d}s"
+        stem = f"{video_stem}_{frame_time}_{timestamp}"
+
+    img_w = frame_image.width()
+    img_h = frame_image.height()
+
+    lines_by_model = {}
+    for x_min, y_min, x_max, y_max, class_name in labelled_boxes:
+        if x_max <= x_min or y_max <= y_min:
+            continue
+        model_name = FEEDBACK_CLASS_TO_MODEL[class_name]
+        class_id = FEEDBACK_MODELS[model_name]["class_names"].index(class_name)
+        xc, yc, w, h = box_to_yolo(x_min, y_min, x_max, y_max, img_w, img_h)
+        lines_by_model.setdefault(model_name, []).append(
+            f"{class_id} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}"
+        )
+
+    if not lines_by_model:
+        raise OSError("No valid boxes to save.")
+
+    saved = []
+    try:
+        for model_name, lines in lines_by_model.items():
+            paths = get_paths(model_name)
+            paths["feedback_images"].mkdir(parents=True, exist_ok=True)
+            paths["feedback_labels"].mkdir(parents=True, exist_ok=True)
+
+            image_path = str(paths["feedback_images"] / (stem + ".jpg"))
+            label_path = str(paths["feedback_labels"] / (stem + ".txt"))
+
+            if not frame_image.save(image_path, "JPG", 95):
+                raise OSError(f"Could not save image to {image_path}")
+            saved.append((model_name, image_path, label_path))
+
+            with open(label_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+    except OSError:
+        for _, image_path, label_path in saved:
+            for path in (image_path, label_path):
+                if os.path.exists(path):
+                    os.remove(path)
+        raise
+
+    return saved
+
+def open_feedback_annotation_dialog(frame_image: QImage, video_path, position_ms=None, parent=None):
+
+        dialog = QDialog(parent or window)
+        dialog.setWindowTitle("Flag Missing Object")
+        dialog.resize(900, 650)
+
+        layout = QVBoxLayout()
+
+        instructions = QLabel("Click and drag to draw a box around any object the detector missed, then choose what it is. "
+                              "You can draw more than one box before saving"
+        )
+        instructions.setWordWrap(True)
+        instructions.setStyleSheet("color: black; font-size: 12px;")
+        layout.addWidget(instructions)
+
+        last_class = {"index": 0}
+
+        def ask_for_class():
+            class_name, accepted = QInputDialog.getItem(
+                dialog,
+                "Object Class",
+                "What is this object?",
+                FEEDBACK_CLASS_NAMES,
+                last_class["index"],
+                False,
+            )
+            if not accepted:
+                return None
+            last_class["index"] = FEEDBACK_CLASS_NAMES.index(class_name)
+            return class_name
+
+        canvas = AnnotationCanvas(frame_image, class_provider=ask_for_class)
+        layout.addWidget(canvas, stretch = 1)
+
+        controls = QHBoxLayout()
+        undo_btn = QPushButton("Undo Last Box")
+        clear_btn = QPushButton("Clear All")
+        cancel_btn = QPushButton("Cancel")
+        save_btn = QPushButton("Save Screenshot")
+
+        for btn in [undo_btn, clear_btn, cancel_btn, save_btn]:
+            btn.setFixedSize(150, 40)
+            btn.setStyleSheet(
+                "QPushButton {background-color:white;color:black;border-radius:8px;}"
+                "QPushButton:hover{background-color:#f0f0f0}"
+            )
+
+        controls.addWidget(undo_btn)
+        controls.addWidget(clear_btn)
+        controls.addWidget(cancel_btn)
+        controls.addWidget(save_btn)
+        controls.setAlignment(Qt.AlignCenter)
+        layout.addLayout(controls)
+
+        dialog.setLayout(layout)
+
+        undo_btn.clicked.connect(canvas.undo_last_box)
+        clear_btn.clicked.connect(canvas.clear_boxes)
+        cancel_btn.clicked.connect(dialog.reject)
+
+        def do_save():
+            if not canvas.has_boxes():
+                QMessageBox.warning(
+                    dialog,
+                    "No Boxes Drawn",
+                    "Draw at least one rectangle around a missing object before saving"
+                )
+                return
+
+            try:
+                saved = save_feedback_sample(
+                    frame_image,
+                    canvas.get_labelled_boxes(),
+                    video_path,
+                    position_ms,
+                )
+            except OSError as e:
+                QMessageBox.critical(dialog, "Save Failed", f"Could not save feedback:\n{e}")
+                return
+
+            details = "\n\n".join(
+                f"{FEEDBACK_MODELS[model_name]['label']}:\n{image_path}\n{label_path}"
+                for model_name, image_path, label_path in saved
+            )
+            QMessageBox.information(
+                dialog,
+                "Saved",
+                "Saved to the retrain feedback folder (image, the YOLO labels):\n\n" + details
+            )
+            
+            dialog.accept()
+
+        save_btn.clicked.connect(do_save)
+        dialog.exec()
 
 
 def show_video_preview(file_path, title="Video Preview", parent=None):
@@ -385,10 +834,14 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
 
     play_btn = QPushButton("Play")
     pause_btn = QPushButton("Pause")
+    flag_btn = QPushButton("Flag Missing Object")
     close_btn = QPushButton("Close")
 
-    for btn in [play_btn, pause_btn, close_btn]:
-        btn.setFixedSize(100, 40)
+    ## for btn in [play_btn, pause_btn, close_btn]:
+    ##    btn.setFixedSize(100, 40)
+
+    for btn in [play_btn, pause_btn, flag_btn, close_btn]:
+        btn.setFixedSize(160 if btn is flag_btn else 100, 40)
         btn.setStyleSheet(
             "QPushButton {background-color:white;color:black;border-radius:8px;}"
             "QPushButton:hover{background-color:#f0f0f0}"
@@ -396,6 +849,7 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
 
     controls.addWidget(play_btn)
     controls.addWidget(pause_btn)
+    controls.addWidget(flag_btn)
     controls.addWidget(close_btn)
     controls.setAlignment(Qt.AlignCenter)
 
@@ -417,6 +871,26 @@ def show_video_preview(file_path, title="Video Preview", parent=None):
     # Keep references alive.
     dialog.player = player
     dialog.audio_output = audio_output
+
+
+    clean_source_path = resolve_clean_source(file_path, VIDEO_EXTENSIONS, check_converted=True)
+
+
+    def flag_missing_object():
+        player.pause()
+        position = player.position()
+
+        flag_frame(
+            dialog,
+            file_path,
+            clean_source_path,
+            lambda path: grab_clean_frame(path, position),
+            "video",
+            position,
+        )
+
+    flag_btn.clicked.connect(flag_missing_object)
+
 
     # =========================
     # Helper function
@@ -787,7 +1261,6 @@ def clear_results():
     clear_folder(RESULT_FOLDER)
     QMessageBox.information(window, "Results Cleared", "All files in results folder have been deleted.")
 
-
 # =========================
 # User guide
 # =========================
@@ -983,6 +1456,7 @@ def show_user_guide():
 app = QApplication(sys.argv)
 install_shutdown_sync()
 
+
 class MainWindow(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1108,6 +1582,7 @@ clear_upload_btn.clicked.connect(clear_uploads)
 clear_result_btn = QPushButton("🗑 Clear Results")
 clear_result_btn.setFixedSize(130, 40)
 clear_result_btn.clicked.connect(clear_results)
+
 
 button_style = (
     "QPushButton {background-color:white;color:black;border-radius:8px;}"
