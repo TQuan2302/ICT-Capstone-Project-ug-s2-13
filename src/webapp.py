@@ -19,6 +19,9 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from json import loads
 
+import combined_map
+import geo_mapping
+
 from detection_settings import show_detection_settings
 from roadsight_paths import (
     seed_runtime_data,
@@ -214,6 +217,42 @@ def get_report_folder(file_name: str) -> Path:
     return Path(REPORT_FOLDER) / Path(get_filename(file_name)).stem
 
 
+def detection_stem(file_name: str) -> str:
+    stem = Path(get_filename(file_name)).stem
+    if not stem or stem in {".", ".."} or stem.startswith("."):
+        raise HTTPException(status_code=404, detail="Detection not found")
+    return stem
+
+
+def delete_detection_files(stem: str) -> bool:
+    """Remove one detection's result file and its map report."""
+    removed = False
+    result = get_detected_video_path(stem)
+    if result is not None and result.is_file():
+        result.unlink()
+        removed = True
+
+    browser_copy = Path(RESULT_FOLDER) / f"detected_{stem}.browser.mp4"
+    if browser_copy.is_file():
+        browser_copy.unlink()
+
+    reports_root = Path(REPORT_FOLDER).resolve()
+    report_dir = (reports_root / stem).resolve()
+    if reports_root in report_dir.parents and report_dir.is_dir():
+        shutil.rmtree(report_dir)
+        removed = True
+
+    cache_file = Path(REPORT_FOLDER) / ".map_cache" / f"{stem}.json"
+    if cache_file.is_file():
+        cache_file.unlink()
+
+    if removed:
+        combined = Path(REPORT_FOLDER) / "all_detections_map.html"
+        if combined.is_file():
+            combined.unlink()
+    return removed
+
+
 def read_csv_records(path: Path):
     """
     Reads the csv file:
@@ -389,6 +428,14 @@ def get_upload_with_stem(stem: str):
         if path.is_file() and path.stem == stem and path.suffix.lower() in UPLOAD_EXTENSIONS:
             return path
     return None
+
+
+@app.delete("/detections/{file_name}")
+def delete_detection(file_name: str):
+    stem = detection_stem(file_name)
+    if not delete_detection_files(stem):
+        raise HTTPException(status_code=404, detail="Detection not found")
+    return {"deleted": stem}
 
 
 @app.get("/detections/{file_name}")
@@ -639,6 +686,65 @@ async def stream_video(file_name: str):
         filename=result_path.name,
         content_disposition_type="inline",
     )
+
+
+# =========================
+# Endpoints for detection maps
+# =========================
+
+
+@app.get("/map-list")
+def get_map_list():
+    target = Path(REPORT_FOLDER)
+    if not target.is_dir():
+        return []
+
+    dir_info_list = []
+    for directory in target.iterdir():
+        if not directory.is_dir() or directory.name.startswith("."):
+            continue
+        if not (directory / "detection_details_with_gps.csv").is_file():
+            continue
+        dir_info_list.append(
+            {
+                "name": directory.name,
+                "date": datetime.fromtimestamp(directory.stat().st_mtime).strftime(
+                    "%d/%m/%Y %H:%M"
+                ),
+            }
+        )
+    dir_info_list.sort(key=lambda item: item["name"].lower())
+    return dir_info_list
+
+
+@app.get("/map/all")
+def show_all_maps():
+    os.makedirs(REPORT_FOLDER, exist_ok=True)
+    output_html = os.path.join(REPORT_FOLDER, "all_detections_map.html")
+    try:
+        map_path = combined_map.build_map_from_reports(REPORT_FOLDER, output_html)
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(map_path, media_type="text/html")
+
+
+@app.get("/map/{file_name}")
+def show_one_map(file_name: str):
+    reports_root = Path(REPORT_FOLDER).resolve()
+    report_dir = (reports_root / file_name).resolve()
+    if report_dir != reports_root and reports_root not in report_dir.parents:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    csv_file = report_dir / "detection_details_with_gps.csv"
+    if not csv_file.is_file():
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    output_html = report_dir / "detection_map.html"
+    try:
+        map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return FileResponse(map_path, media_type="text/html")
 
 
 # =========================

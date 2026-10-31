@@ -22,6 +22,7 @@
             <li><a href="/" class="nav-link text-white">Home</a></li>
             <li><a href="/results/" class="nav-link text-secondary">Results</a></li>
             <li><a href="/retrain/" class="nav-link text-white">Retrain</a></li>
+            <li><a href="/map/" class="nav-link text-white">Map</a></li>
           </ul>
         </div>
       </div>
@@ -38,6 +39,7 @@
             <tr>
               <th scope="col">File</th>
               <th scope="col">Uploaded</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody id="processed_table"></tbody>
@@ -51,6 +53,7 @@
         <div class="d-flex gap-2">
           <a id="report_csv_link" class="btn btn-outline-primary btn-sm" hidden download>Counts Report</a>
           <a id="details_csv_link" class="btn btn-outline-primary btn-sm" hidden download>Detection Details</a>
+          <button type="button" class="btn btn-primary btn-sm" id="show_map_btn" hidden>Map</button>
         </div>
       </div>
 
@@ -72,7 +75,7 @@
     </div>
   </div>
 
-  <script src="/assets/detections.js?v=2"></script>
+  <script src="/assets/detections.js?v=5"></script>
 </body>
 
 </html>

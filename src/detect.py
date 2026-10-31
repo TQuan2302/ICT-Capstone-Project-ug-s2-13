@@ -1396,6 +1396,7 @@ def process_video(
                     # fresher GPS so the final entry holds the last frame.
                     last_seen_data[(display_label, track_id)] = {
                         "snapshot": frame.copy(),
+                        "box": (x1, y1, x2, y2),
                         "row": {
                             "source_file": source_file_path.name,
                             "processed_file": file_path.name,
@@ -1479,7 +1480,10 @@ def process_video(
         if data is None:
             continue
         snap_path = snapshot_dir / f"{label}_id{tid}_last.jpg"
-        cv2.imwrite(str(snap_path), data["snapshot"])
+        snapshot = data["snapshot"].copy()
+        x1, y1, x2, y2 = data["box"]
+        cv2.rectangle(snapshot, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        cv2.imwrite(str(snap_path), snapshot)
         detail_rows.append(data["row"])
 
     total_counts = {label: len(ids) for label, ids in seen_ids.items()}

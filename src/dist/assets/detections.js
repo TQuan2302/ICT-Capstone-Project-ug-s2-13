@@ -166,6 +166,7 @@ function renderDetections(fileName) {
       }
       displayDownload(document.getElementById("report_csv_link"), data.csv && data.csv.report);
       displayDownload(document.getElementById("details_csv_link"), data.csv && data.csv.details);
+      displayMapButton(fileName);
       showDetectionResult(data.media);
     })
     .catch(() => {
@@ -175,8 +176,27 @@ function renderDetections(fileName) {
       if (detailsTable) {
         buildHtmlTable(detailsTable, [], "Error: Could not load the detection details report.");
       }
+      displayMapButton("");
       showDetectionResult(null);
     });
+}
+
+/**
+ * Show the Map button for the selected file.
+ * Clicking it opens that file's map.
+ */
+function displayMapButton(fileName) {
+  const button = document.getElementById("show_map_btn");
+  if (!button) {
+    return;
+  }
+  if (!fileName) {
+    button.hidden = true;
+    button.dataset.stem = "";
+    return;
+  }
+  button.hidden = false;
+  button.dataset.stem = fileName;
 }
 
 /**
@@ -200,6 +220,13 @@ function renderFinishedDetectionsList() {
         row.dataset.stem = element.stem;
         row.insertCell(0).textContent = element.filename;
         row.insertCell(1).textContent = element.date;
+        const deleteCell = row.insertCell(2);
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "btn btn-sm text-danger fw-bold p-0 px-2 delete-entry";
+        deleteButton.textContent = "X";
+        deleteButton.dataset.stem = element.stem;
+        deleteCell.appendChild(deleteButton);
         if (element.filename === selectedName) {
           row.classList.add("table-active");
         }
@@ -215,6 +242,9 @@ window.addEventListener("load", () => {
 const processedTable = document.getElementById("processed_table");
 if (processedTable) {
   processedTable.addEventListener("click", (event) => {
+    if (event.target.closest(".delete-entry")) {
+      return;
+    }
     const row = event.target.closest("tr");
     if (!row || !processedTable.contains(row)) {
       return;
@@ -226,6 +256,66 @@ if (processedTable) {
     processedTable.querySelectorAll("tr").forEach((item) => item.classList.remove("table-active"));
     row.classList.add("table-active");
     renderDetections(fileName);
+  });
+}
+
+function clearDetectionDetails() {
+  displayMapButton("");
+  displayDownload(document.getElementById("report_csv_link"), "");
+  displayDownload(document.getElementById("details_csv_link"), "");
+  const countsTable = document.getElementById("counts_table");
+  const detailsTable = document.getElementById("detections_table");
+  if (countsTable) {
+    buildHtmlTable(countsTable, [], "");
+  }
+  if (detailsTable) {
+    buildHtmlTable(detailsTable, [], "");
+  }
+  showDetectionResult(null);
+}
+
+function deleteDetection(stem) {
+  fetch(`/detections/${encodeURIComponent(stem)}`, { method: "DELETE" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Could not delete the detection.");
+      }
+      const active = processedTable.querySelector("tr.table-active");
+      if (active && active.dataset.stem === stem) {
+        clearDetectionDetails();
+      }
+      renderFinishedDetectionsList();
+    });
+}
+
+if (processedTable) {
+  processedTable.addEventListener("click", (event) => {
+    const button = event.target.closest(".delete-entry");
+    if (!button || !processedTable.contains(button)) {
+      return;
+    }
+    event.stopPropagation();
+    const stem = button.dataset.stem;
+    if (!stem) {
+      return;
+    }
+    const row = button.closest("tr");
+    const fileName = row && row.cells[0] ? row.cells[0].textContent : stem;
+    if (!window.confirm(`Delete ${fileName}? This also removes its map.`)) {
+      return;
+    }
+    deleteDetection(stem);
+  });
+}
+
+const showMapButton = document.getElementById("show_map_btn");
+if (showMapButton) {
+  showMapButton.addEventListener("click", () => {
+    const fileName = showMapButton.dataset.stem;
+    if (!fileName) {
+      return;
+    }
+    window.open(`/map/${encodeURIComponent(fileName)}`, "_blank", "popup,width=1200,height=800");
   });
 }
 
