@@ -37,13 +37,17 @@ def list_report_csvs(reports_folder):
     return csv_paths
 
 
-# True when the saved HTML is newer than every video CSV, so nothing needs rebuilding.
+# True when the saved HTML is newer than every remaining video CSV.
+# No remaining CSV means the saved page is stale, even though nothing is newer than it.
 def combined_map_is_current(reports_folder, output_html):
     output_html = Path(output_html)
     if not output_html.is_file():
         return False
+    csv_paths = list_report_csvs(reports_folder)
+    if not csv_paths:
+        return False
     html_mtime_ns = output_html.stat().st_mtime_ns
-    for csv_path in list_report_csvs(reports_folder):
+    for csv_path in csv_paths:
         if csv_path.stat().st_mtime_ns > html_mtime_ns:
             return False
     return True
@@ -105,7 +109,14 @@ def read_all_report_csvs(reports_folder):
 
 # Open the existing combined map, or write a new one.
 # A new HTML file is written only when at least one CSV is newer than the saved map.
+# When no video remains, the saved page is removed so it cannot be opened again.
 def build_map_from_reports(reports_folder, output, selected_classes=None):
+    reports_folder = Path(reports_folder)
+    output = Path(output)
+    if not list_report_csvs(reports_folder):
+        if output.is_file():
+            output.unlink()
+        raise ValueError("No detection reports found")
     if combined_map_is_current(reports_folder, output):
         return str(output)
     points = read_all_report_csvs(reports_folder)

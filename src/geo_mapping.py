@@ -243,8 +243,7 @@ def build_map(points, output_html, selected_classes=None):
     # test Esri map: 
     folium_map = folium.Map(
         location=[avg_lat, avg_lon],
-        zoom_start=12,
-        tiles="Esri.WorldStreetMap",
+        zoom_start=12
     )
 
     # Shared cluster so overlapping pins still group; LayerControl lists each class.

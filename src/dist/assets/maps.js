@@ -1,5 +1,6 @@
 function open_map(url) {
-  window.open(url, "_blank", "popup,width=1200,height=800");
+  const separator = url.includes("?") ? "&" : "?";
+  window.open(`${url}${separator}v=${Date.now()}`, "_blank", "popup,width=1200,height=800");
 }
 
 function build_map_list() {

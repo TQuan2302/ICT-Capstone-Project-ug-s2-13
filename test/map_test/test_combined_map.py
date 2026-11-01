@@ -57,6 +57,19 @@ def test_the_combined_map_is_current_when_it_is_newer_than_every_report(tmp_path
     assert combined_map.combined_map_is_current(tmp_path, saved_map) is True
 
 
+#Test case - Caching: A saved combined page is not reused after every video has been removed.
+def test_a_saved_combined_map_is_dropped_when_no_video_remains(tmp_path):
+    saved_map = tmp_path / "all_detections_map.html"
+    saved_map.write_text("OLD MAP", encoding="utf-8")
+
+    assert combined_map.combined_map_is_current(tmp_path, saved_map) is False
+
+    with pytest.raises(ValueError, match="No detection reports found"):
+        combined_map.build_map_from_reports(tmp_path, saved_map)
+
+    assert saved_map.exists() is False
+
+
 #Test case - Caching: If any video CSV changed, the combined map has to be built again."""
 def test_one_newer_report_makes_the_combined_map_out_of_date(tmp_path):
     

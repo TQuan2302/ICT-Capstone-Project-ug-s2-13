@@ -725,7 +725,11 @@ def show_all_maps():
         map_path = combined_map.build_map_from_reports(REPORT_FOLDER, output_html)
     except (ValueError, FileNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return FileResponse(map_path, media_type="text/html")
+    return FileResponse(
+        map_path,
+        media_type="text/html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/map/{file_name}")
@@ -744,7 +748,11 @@ def show_one_map(file_name: str):
         map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return FileResponse(map_path, media_type="text/html")
+    return FileResponse(
+        map_path,
+        media_type="text/html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # =========================
