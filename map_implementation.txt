@@ -1,0 +1,115 @@
+RoadSight map implementation
+============================
+
+This note explains how the map is implemented.
+
+map_workflow.txt, describes what the user does and how saved files are reused.
+
+
+1. Overall design
+-----------------
+
+The map is not drawn inside the RoadSight page.
+Python uses Folium to write a standalone HTML file. The browser then opens that file in a new window.
+
+Two maps are produced from the same drawing code:
+  one video     reports/<video name>/detection_map.html
+  all videos    reports/all_detections_map.html
+
+The Map tab only lists videos and opens those files.
+The list page is src/dist/map/index.html, and its behaviour is in src/dist/assets/maps.js.
+
+
+2. Source files
+---------------
+
+src/geo_mapping.py
+  Reads one GPS CSV, turns each row into a point, and draws the Folium page.
+
+src/combined_map.py
+  Reads every video's GPS CSV, attaches cached photos and draws one page.
+
+src/snapshot_cache.py
+  Stores encoded snapshot photos for the combined map, one JSON file per video.
+
+src/webapp.py
+  Serves the video list, opens and delete maps
+
+src/dist/assets/map/
+  The confidence-slider CSS and JavaScript that allows user to filter out markers based on their confidence level
+
+
+3. From a detection to a point
+------------------------------
+
+Detection writes reports/<video name>/detection_details_with_gps.csv.
+A row can appear on a map only when camera_latitude and camera_longitude are present and numeric.
+Rows without coordinates are skipped.
+
+Each kept row becomes one point with:
+  latitude, longitude, class_name, object_id, confidence, speed_value
+
+The snapshot for that point is snapshots/<class_name>_id<track id>_last.jpg, beside the CSV.
+The track id is taken from object_id. The usual form is "<class_name>_<track id>".
+When the id does not start with the class name, the part after the last "_" is used.
+The JPEG is encoded and stored on the point, so the saved HTML can show the photo without reading the JPEG again.
+
+
+4. Drawing the page
+-------------------
+
+The page is centred on the average latitude and longitude of the points.
+The base map is Esri World Street Map.
+Overlapping pins share one marker cluster.
+
+Each class receives its own layer, named after class_name.
+A colour is assigned the first time that class appears, using a fixed list of colours in order.
+Every class layer starts hidden. The pins are in the file, and the user ticks a class in the layer control to see them.
+
+A pin popup shows the class, object id, confidence, and coordinates.
+For a speed_limit_sign, a non-blank speed_value is added as the speed.
+When the point came from the combined map, the popup also names the source video.
+The snapshot, when one exists, is shown in the popup as an embedded image.
+
+Each pin also records its confidence. The confidence slider is copied from src/dist/assets/map/ into the saved HTML, so the user can hide pins below a chosen score.
+
+The same drawing step is used for one video and for all videos.
+
+
+5. One video
+------------
+
+The Map tab open /map/<video name>.
+The server looks for reports/<video name>/detection_details_with_gps.csv.
+When the saved detection_map.html is current, that file is returned.
+Otherwise the CSV is read, the snapshots are encoded from the JPEG files, and a new HTML file is written over the old one.
+A current file means the HTML exists and the CSV is older than it, or the two files have the same modification time.
+
+This path does not read reports/.map_cache/ for the encoded snapshot as the encoded snapshot for one video live inside detection_map.html.
+
+
+6. All videos
+-------------
+
+Clicking on "Show all maps" calls /map/all.
+The server compares reports/all_detections_map.html with every remaining video's GPS CSV.
+The saved page is reused when no remaining CSV is newer than it.
+If no video remains, that page is removed and the request reports that no detection reports were found. 
+
+
+7. Web routes
+-------------
+
+GET /map-list
+  Returns each report folder that contains a GPS CSV, except the hidden folder.
+  The Map page uses this list for its table. .map_cache is therefore not shown as a video.
+
+GET /map/<video name>
+  Returns that video's map HTML.
+
+GET /map/all
+  Returns the combined map HTML.
+
+GET /map/ is the list page. A request for /map without the final slash is redirected there.
+
+A missing report, a missing GPS CSV, or a map with no coordinates returns a not-found response.
