@@ -1,0 +1,156 @@
+RoadSight map workflow
+======================
+
+This note explains how a detection map is built, saved, and opened.
+
+The map is a Folium HTML page. It is not drawn inside the RoadSight window.
+The web app calls the Python map functions, then opens the HTML file.
+
+
+1. Where is the files
+-----------------------
+
+Source
+  src/geo_mapping.py       Functions for generating map for one video
+  src/combined_map.py      Functions for generating a combined map from all videos and caching 
+  src/snapshot_cache.py    Saved snapshot photos for the combined map in order to speed up the processing next time user open the map
+  src/locationsa.py        Extra data from the South Australian road API
+  src/webapp.py            Web routes
+  src/dist/map/index.html  Map page in the web app
+  src/dist/assets/maps.js  Java script rules for src/dist/map/index.html
+  src/dist/assets/map/     Confidence slider CSS and JavaScript for the map
+
+Runtime data is the reports folder inside the first RoadSight folder the app can write to:
+  Mac: ~/Library/Application Support/RoadSight
+  Windows: %APPDATA%\RoadSight
+  otherwise <project>/data
+  otherwise ~/Documents/RoadSight
+
+Inside that reports folder:
+  <video name>/detection_details_with_gps.csv   GPS rows for one video
+  <video name>/snapshots/                       Last photo for each detection
+  <video name>/detection_map.html               Map for that video
+  all_detections_map.html                       Combined map containing all detections
+  .map_cache/<video name>.json                  Encoded photos so they are not rebuilt every time speeding up the map generation
+
+Important CSV columns the map reads: camera_latitude, camera_longitude, class_name, object_id, confidence, speed_value
+
+speed_value is shown on a speed_limit_sign pin when that cell is not blank.
+
+A snapshot is a .jpg of the last processed frame in which that object was detected.
+A red box is drawn around that object before the photo is saved. It is named:
+  snapshots/<class_name>_id<track id>_last.jpg
+object_id is usually "<class_name>_<track id>", for example "pothole_12".
+If the id does not start with the class name, the part after the last "_" is used.
+
+
+2. Map workflow
+---------------------
+
+Please note that the map only works if there is a .csv file with camera_latitude and camera_longitude.
+
+The preferred video is a .mov. Detection reads the GPS data stored inside that file and writes those coordinates into the CSV.
+An .mp4, .mkv, .avi, or .insv has no GPS of its own. Those videos are mapped only when the user also uploads a .gpx track.
+A video with no GPS still runs detection, but its rows have no coordinates, so the map list leaves it out.
+
+Web app
+  1. On the Home tab, the user runs detection on a video.
+     This generate that video's GPS CSV.
+  2. The user opens the Map tab.
+     The page lists every video that has a GPS CSV.
+  3. The user clicks one video in that list.
+     That video's map opens in a new window.
+  4. The user clicks Show all maps.
+     One map of every video opens in a new window.
+  5. To remove a video, the user clicks the red X on its row in the Map tab or the Results tab.
+     A popup asks for confirmation. After OK, that video's map and its detection result are deleted.
+
+
+3. Caching
+----------
+
+The first time a map is opened, it is drawn and saved as an HTML file.
+On a later open, that file is used again when it is still current.
+A saved map is current when the GPS CSV has not been written since the HTML was saved.
+The check compares the modification times of the two files.
+When the CSV is older than the HTML, or the two files have the same time, the saved HTML is reused.
+The CSV is left unread, the photos are left unencoded, and the map is not drawn again.
+A newer CSV indicates that detection has run again, so the map is regenerated and the previous HTML is replaced.
+
+One video
+  The saved page is reports/<video name>/detection_map.html.
+  This page is compared only with that video's GPS CSV.
+  A newer CSV makes the map to be drawn again and the previous HTML to be replaced.
+  An older CSV, or an equal modification time, makes the next open to use the existing HTML.
+
+All videos
+  The saved page is reports/all_detections_map.html.
+  It is compared with every remaining video's GPS CSV and reused when no CSV is newer than it.
+  If no video remains, the saved page is removed and is not opened.
+  One newer CSV redraws the whole page. The CSV files are only read and left unchanged.
+  During that redraw, an unchanged video reuses its encoded photos from reports/.map_cache/<video name>.json.
+  A newer CSV, or a missing or broken cache file, encodes that video's photos again.
+  A single-video map keeps its photos inside detection_map.html and does not use this cache.
+
+Deleting a video also removes its cache file and the combined HTML.
+If other videos remain, the next Show all maps draws a new page without the deleted video.
+If no video remains, Show all maps does not open the old page.
+
+
+4. Deleting an entry
+-------------------
+
+The Results tab and the Map tab each show a red X on a row.
+Both buttons perform the same deletion. Removing an entry from one tab also removes it from the other.
+
+Before anything is removed, a popup asks the user to confirm.
+On the Results tab the message names the file and says that its map will also be removed.
+On the Map tab the message names the video and says that its detection result will also be removed.
+Cancel closes the popup and leaves every file unchanged.
+OK sends delete request for that video.
+
+The request is refused when the name is blank, is "." or "..", or begins with a dot.
+This keeps the hidden .map_cache folder from being treated as a video.
+
+After confirmation, these files for that video are removed:
+  results/detected_<video name> with its video or image extension
+  results/detected_<video name>.browser.mp4, when that preview copy exists
+  the whole reports/<video name>/ folder
+    this includes the GPS CSV, the detection report CSV, the snapshots, and detection_map.html
+  reports/.map_cache/<video name>.json
+  reports/all_detections_map.html
+
+
+
+6. Order of calls
+-----------------
+
+One video
+  maps.js
+        webapp.show_one_map
+        geo_mapping.build_map_from_csv
+            map_html_is_current
+            read_csv_input
+                snapshot_path_for_point
+                image_to_data_uri
+            build_map
+                filter_points_by_class
+                assign_color_for_class
+                get_class_layer
+                retrieve_info
+                ConfidenceSlider
+
+All videos
+  maps.js
+        webapp.show_all_maps
+        combined_map.build_map_from_reports
+            combined_map_is_current
+                list_report_csvs
+            read_all_report_csvs
+                list_report_csvs
+                geo_mapping.read_csv_input with encode_snapshots=False
+                attach_cached_snapshots
+                    snapshot_cache.images_for_video
+                locationsa.getRandomStatePoints
+            geo_mapping.build_map
+

@@ -1,0 +1,46 @@
+How speed numbers are read from the sign - src/detect.py
+=========================================
+
+Speed limit sign:
+--------------------------------
+1. Yolo model detects the speed limit sign that has the speed number inside the bounding box.
+2. The bounding box is cropped from the frame.
+3. Create 4 versions of the cropped image:
+- Crop 18% from each edge of the bounding box, colour and black and white.
+- Crop 5% from each edge of the bounding box, colour and black and white.
+4. Each is passed to Tesseract to read the number, stops at the first one that parses as a valid speed number.
+- Valid speed number = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 100, 110]
+
+The box must be at least 8 by 8 pixels or it is skipped.
+Tesseract uses mode 7 (one line of text).
+
+Speed advisory sign:
+--------------------------------
+1. Yolo detects the speed advisory sign and builds the bounding box around that sign and not the number plate under it.
+2. Build the search area: widen the box by 35% on each side, start 12% of the box height above the bottom of the box, and extend the bottom by 105% of the box height.
+3. Crop that area from the frame (region).
+4. Turn region into a yellow mask.
+5. Find yellow bands in that mask:
+   a row counts as yellow if more than 20% of its pixels are marked.
+   a run of at least 10 yellow rows in a row is one band.
+6. If there is only one band and it is taller than 55% of region, it is too tall to be just the plate, split at the darkest row near the middle and keep the lower yellow part (the number plate).
+else, take the lowest yellow band as the plate.
+7. Take the number plate (cropped yellow band):
+- Keep only the top 70% of the plate (the bottom of a plate has no digits).
+- Enlarges that crop to at least 140 pixels tall
+- Add a 28-pixel border
+8. Runs Tesseract twice, with page-segmentation modes 8 (one word) and 13 (one raw line).
+
+If the yellow-plate search finds nothing, the same in-box crop used
+for speed limit signs is tried as a fallback.
+
+Voting across frames:
+--------------------------------
+For each object id (i.e detected feature), keep track of the speed numbers read for it.
+
+Once that speed has been read at least twice and is at least 60% of all reads for that object id,
+the vote is locked and OCR is not read again for that object id for the rest of the file.
+
+A speed limit sign in the detected video looks like:
+50 speed limit sign
+confidence score: 0.90

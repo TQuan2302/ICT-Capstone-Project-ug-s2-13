@@ -1,0 +1,28 @@
+.selectable-table tr:has(.row-checkbox:checked) {
+  background-color: var(--bs-table-active-bg, #e9ecef);
+  color: var(--bs-table-active-color);
+}
+
+.table-opaque {
+  --bs-bg-opacity: 0.0;
+}
+
+.spreadsheet {
+  overflow-x: auto;
+}
+
+.spreadsheet th,
+.spreadsheet td {
+  white-space: nowrap;
+}
+
+#job_progress {
+  height: 2rem;
+  font-size: 1rem;
+}
+
+#job_bar {
+  min-width: 20ch;
+  padding: 0 1rem;
+  white-space: nowrap;
+}

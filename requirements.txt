@@ -6,3 +6,10 @@ numpy
 matplotlib
 torch
 pytest
+fastapi[standard]
+pandas
+pytesseract
+watchdog
+folium
+branca
+requests

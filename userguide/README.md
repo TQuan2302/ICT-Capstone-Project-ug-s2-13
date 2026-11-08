@@ -23,6 +23,20 @@
 5. python -m pip install pyinstaller
 6. python -m PyInstaller RoadSight.spec --clean --noconfirm
 - The finished app would be dist\RoadSight\RoadSight.exe, click on it to start the system
+# Method 1 - MacOS
+1. Double-click on RoadSight.command to start the webapp 
+note: If there is a warning and the file can't be opened:
+- Open System Settings
+- Click Privacy & Security
+- Scroll down and look for Open Anyway
+2. Close the webapp browser
+3. Close the terminal
+
+# Method 2 - Windows
+1. Double-click RoadSight.bat to start the webapp
+If Windows shows a security warning and the file can't be opened:
+- Click More info.
+- Click Run anyway.
 
 
 Dataset Source :

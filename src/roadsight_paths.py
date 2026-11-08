@@ -1,3 +1,10 @@
+# This file contains the paths to the data folders and the functions to manage them.
+# It first finds a writable data folder:
+# 1. Mac: ~/Library/Application Support/RoadSight
+#    Windows: %APPDATA%\RoadSight
+# 2. <project>/data
+# 3. ~/Documents/RoadSight
+
 from __future__ import annotations
 
 import atexit
@@ -54,20 +61,46 @@ def read_only_root() -> Path:
     return writable_root()
 
 def check_writable(folder: Path) -> bool:
+    probe = folder / ".write_probe"
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        probe = folder / ".test"
-        probe.write_text("can write", encoding="utf-8")
-        probe.unlink()
-        return True
+        probe.write_bytes(b"ok")
     except OSError:
         return False
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+def documents_data_dir() -> Path:
+    return Path.home() / "Documents" / "RoadSight"
+
+def project_data_dir() -> Path:
+    return writable_root() / "data"
+
+def app_support_data_dir() -> Path:
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "RoadSight"
+        return Path.home() / "AppData" / "Roaming" / "RoadSight"
+    return Path.home() / "Library" / "Application Support" / "RoadSight"
+
+def tree_writable(root: Path) -> bool:
+    return all(
+        check_writable(root / name)
+        for name in ("", "uploads", "results", "reports")
+    )
 
 def resolve_data_dir() -> Path:
-    data_dir = Path.home() / "Documents" / "RoadSight"
-    if not check_writable(data_dir):
-        raise OSError(f"Can not write to {data_dir}")
-    return data_dir
+    for candidate in (app_support_data_dir(), project_data_dir(), documents_data_dir()):
+        if tree_writable(candidate):
+            return candidate
+
+    raise OSError(
+        f"Can not write to {project_data_dir()} or {app_support_data_dir()}."
+    )
 
 DATA_DIR = resolve_data_dir()
 
@@ -254,5 +287,6 @@ def install_shutdown_sync() -> None:
             qt_hooked = True
     except Exception:
         pass
+
 
 # References: this script has been written with the help of AI (chatgpt, Claude, Grok)
