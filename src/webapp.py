@@ -224,6 +224,14 @@ def detection_stem(file_name: str) -> str:
     return stem
 
 
+def clear_detection_status(stem: str) -> None:
+    """Drop the in-memory status for every upload that shares this stem."""
+    with detection_queue_lock:
+        for filename in list(detection_status.keys()):
+            if Path(filename).stem == stem:
+                detection_status.pop(filename, None)
+
+
 def delete_detection_files(stem: str) -> bool:
     """Remove one detection's result file and its map report."""
     removed = False
@@ -250,6 +258,7 @@ def delete_detection_files(stem: str) -> bool:
         combined = Path(REPORT_FOLDER) / "all_detections_map.html"
         if combined.is_file():
             combined.unlink()
+        clear_detection_status(stem)
     return removed
 
 
