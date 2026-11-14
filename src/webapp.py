@@ -768,6 +768,9 @@ def show_one_map(file_name: str):
 # Static file hosting for the web-based interface
 # =========================
 
+# Flag Missing Object (feedback) routes
+from feedback_routes import router as feedback_router
+app.include_router(feedback_router)
 
 app.mount("/", StaticFiles(directory=os.path.join(BASE_DIR, "dist"), html=True), name="frontend")
 

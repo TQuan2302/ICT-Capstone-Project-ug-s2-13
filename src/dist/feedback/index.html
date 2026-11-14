@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoadSight flag missing object</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+
+<body>
+  <header>
+    <div class="px-3 py-2 text-bg-dark border-bottom">
+      <div class="container">
+        <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+          <a href="/" class="d-flex align-items-center my-2 my-lg-0 me-lg-auto text-white text-decoration-none fw-bold">
+            RoadSight
+          </a>
+          <ul class="nav col-12 col-lg-auto my-2 justify-content-center my-md-0">
+            <li><a href="/" class="nav-link text-white">Home</a></li>
+            <li><a href="/results/" class="nav-link text-secondary">Results</a></li>
+            <li><a href="/retrain/" class="nav-link text-white">Retrain</a></li>
+            <li><a href="/map/" class="nav-link text-white">Map</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="container py-3">
+    <div class="p-3 bg-body-secondary rounded-3 shadow-sm">
+      <h1 class="h3">Flag missing object</h1>
+      <p class="text-secondary mb-2">
+        Click and drag on the picture to draw a box around any object the detector missed.
+        Pick its class first. You can draw more than one box before saving.
+      </p>
+      <p class="mb-3"><strong>File:</strong> <span id="file_name"></span> <span id="frame_time" class="text-secondary"></span></p>
+
+      <div id="warning" class="alert alert-warning" hidden></div>
+      <div id="message" class="alert" hidden></div>
+
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <label for="class_select" class="fw-semibold">Class for the next box</label>
+        <select id="class_select" class="form-select w-auto"></select>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="undo_btn">Undo Last Box</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear_btn">Clear All</button>
+        <button type="button" class="btn btn-success btn-sm" id="save_btn" disabled>Save Screenshot</button>
+        <a href="/results/" class="btn btn-outline-primary btn-sm" id="back_link">Back to results</a>
+      </div>
+
+      <div class="border rounded-3 bg-dark p-2 text-center">
+        <canvas id="canvas" style="max-width: 100%; height: auto; cursor: crosshair; touch-action: none;"></canvas>
+      </div>
+
+      <h2 class="h6 mt-3">Boxes drawn</h2>
+      <ol id="box_list" class="mb-0"></ol>
+    </div>
+  </div>
+
+  <script src="/assets/feedback.js"></script>
+</body>
+
+</html>
+
+# References: this script has been written with the help of AI (chatgpt, Claude, Grok)
