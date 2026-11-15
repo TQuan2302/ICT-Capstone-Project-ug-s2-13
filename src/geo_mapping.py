@@ -1,8 +1,12 @@
 from pathlib import Path
-from folium.plugins import FeatureGroupSubGroup, MarkerCluster
+from folium.plugins import FeatureGroupSubGroup, MarkerCluster, GroupedLayerControl
 import csv
 import folium
 import base64
+
+import locationsa
+import gps_from_gpx
+import gps_from_mov
 
 #for confidence level slider: 
 from branca.element import MacroElement, Template
@@ -47,6 +51,17 @@ def retrieve_info(point):
     return html_file
 
 
+def retrieve_info_api(point):
+    html_file =  (
+            f"<b>{point['class_name']}</b>"
+            f"<br>id: {point['object_id']}"
+            f"<br>message: {point['message']}"
+        )
+
+    html_file = html_file + f"<br>({point['latitude']:.6f}, {point['longitude']:.6f})"
+
+    return html_file
+
 
 #Read a ~/Documents/RoadSight/reports/<Input File Name>/detection_details_with_gps.csv
 #and return only the rows are not empty. 
@@ -81,12 +96,15 @@ def read_csv_input(csv_path, encode_snapshots=True):
 
             #Read the columns from row
             point = {
+                "source" : "detection",
                 "latitude": lat,
                 "longitude": lon,
                 "class_name": clean_text(row, "class_name"),
                 "object_id": clean_text(row,"object_id"),
                 "confidence": clean_text(row,"confidence"),
                 "speed_value": clean_text(row, "speed_value"),
+                "bearing": clean_text(row, "camera_angle"),
+                "screen": clean_text(row, "side_of_frame")
             }
 
             if encode_snapshots:
@@ -95,6 +113,30 @@ def read_csv_input(csv_path, encode_snapshots=True):
                 point["snapshot_data_uri"] = None
 
             points.append(point)
+    return points
+
+def read_api_csv_input(api_csv):
+    
+    csv_path = Path(api_csv)
+    
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV not found: {csv_path}")
+    
+    points = []
+    
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:        
+            point = {
+                "source" : "api",
+                "latitude": float(clean_text(row, "latitude")),
+                "longitude": float(clean_text(row, "longitude")),
+                "class_name": clean_text(row, "class_name"),
+                "object_id": clean_text(row,"object_id"),
+                "message": clean_text(row,"message"),
+            }
+            points.append(point)
+            
     return points
 
 
@@ -135,7 +177,7 @@ def filter_points_by_class(points, selected_classes=None):
     #Retrieve only points with allowed class: 
     for point in points: 
         class_name = point["class_name"].lower()
-        if class_name in allowed: 
+        if class_name in allowed:
             filtered_points.append(point)
     return filtered_points
 
@@ -144,14 +186,13 @@ def class_layer_name(class_name):
     return class_name or "unknown"
 
 # Function for Layer Control checkbox per class. Markers still share the same cluster
-# show=False: start hidden / unchecked; user must tick a class to see it
 def get_class_layer(class_name, cluster, layers, folium_map):
     
     name = class_layer_name(class_name)
 
     if name not in layers:
         #Create the "named group" which is named of "name" inside the specific "cluster"
-        layer = FeatureGroupSubGroup(cluster, name=name, show=False)
+        layer = FeatureGroupSubGroup(cluster, name=name)
         folium_map.add_child(layer)
         layers[name] = layer
     return layers[name]
@@ -229,16 +270,20 @@ class ConfidenceSlider(MacroElement):
 # Returns the output path as a string 
 
 def build_map(points, output_html, selected_classes=None):
+    routes = [p for p in points if p["source"] == "route"]
+    points = [p for p in points if p["source"] != "route"]
+    
+    # Prepare output
     output_html = Path(output_html)
     points = filter_points_by_class(points, selected_classes)
 
+    # Exception
     if not points:
         raise ValueError("No data to map, csv file coordinates empty")
 
     # Center the map on the average of all points.
     avg_lat = sum(p["latitude"] for p in points) / len(points)
     avg_lon = sum(p["longitude"] for p in points) / len(points)
-
     
     # test Esri map: 
     folium_map = folium.Map(
@@ -253,21 +298,37 @@ def build_map(points, output_html, selected_classes=None):
 
     color_map = {}
     tracked_markers = []
-    for p in points:        
-            
-        try:
-            confidence_value = float(p["confidence"])
-        except ValueError:
-            confidence_value = 0.0
+    
+    # layer groupings
+    D = [] #detections
+    A = [] #api
+    R = [] #routes
 
+    for p in points:
+                
+        # get confidence and create popup
+        if p["source"] == "detection":
+            popup_html = retrieve_info(p)
+            try: confidence_value = float(p["confidence"])
+            except ValueError: confidence_value = 0.0
+        elif p["source"] == "api":
+            popup_html = retrieve_info_api(p)
+            confidence_value = 1.0
+                        
+        # assign colour
         color = assign_color_for_class(p["class_name"], color_map)
-        popup_html = retrieve_info(p)
+        
+        # place marker based on screen position
+        loc = [p["latitude"], p["longitude"]]
+        if p["source"] == "detection": loc = offRoad(p)
+        
+        # create marker
         class_layer = get_class_layer(p["class_name"], cluster, class_layers, folium_map)
         tooltip = p["class_name"]
         if p.get("source_video"):
             tooltip = f"{p['class_name']} ({p['source_video']})"
         marker = folium.Marker(
-            location=[p["latitude"], p["longitude"]],
+            location=loc,
             popup=folium.Popup(popup_html, max_width=470),
             tooltip=tooltip,
             icon=folium.Icon(color=color, icon="info-sign"),
@@ -275,8 +336,43 @@ def build_map(points, output_html, selected_classes=None):
         )
         marker.add_to(class_layer)
         tracked_markers.append((marker.get_name(), class_layer.get_name(), confidence_value))
+        
+        if class_layer in A or class_layer in D: continue
+        if p["source"] == "detection": D.append(class_layer)
+        elif p["source"] == "api": A.append(class_layer)
 
-    folium.LayerControl(collapsed=False).add_to(folium_map)
+        
+    for r in routes:
+        color = assign_color_for_class(r["report"], color_map)
+        
+        route_layer = folium.FeatureGroup(
+            name='"' + r["report"] + '" route',
+            show=True
+        )
+        
+        R.append(route_layer)
+
+        folium.PolyLine(
+            locations=r["line"],
+            color=color,
+            weight=5,
+            opacity=1,
+            tooltip=r["report"]
+        ).add_to(route_layer)
+        
+        route_layer.add_to(folium_map)
+
+    GroupedLayerControl(
+        groups={
+            "Feature Detection": D,
+            "State API": A,
+            "GPS Route": R,
+        },
+        exclusive_groups=False,
+        collapsed=False
+    ).add_to(folium_map)
+    
+    # folium.LayerControl(collapsed=False).add_to(folium_map)
 
     marker_lines = []
     for marker_name, group_name, confidence_value in tracked_markers:
@@ -292,23 +388,61 @@ def build_map(points, output_html, selected_classes=None):
     return str(output_html)
 
 
+def offRoad(p):
+    cameraLat = p["latitude"]
+    cameraLong = p["longitude"]
+    bearing = p["bearing"]
+    screenPos = p["screen"]
+    
+    print(bearing)
+    
+    return [cameraLat, cameraLong]
+
+
 # True when this video's saved HTML is newer than its CSV, so nothing needs rebuilding.
-def map_html_is_current(csv_path, output_html):
+def map_html_is_current(csv_path, api_file, output_html):
     output_html = Path(output_html)
     csv_path = Path(csv_path)
-    if not output_html.is_file() or not csv_path.is_file():
+    api_path = Path(api_file)
+    
+    if not output_html.is_file() or not csv_path.is_file() or not api_path.is_file():
         return False
-    return csv_path.stat().st_mtime_ns <= output_html.stat().st_mtime_ns
+    
+    return csv_path.stat().st_mtime_ns <= output_html.stat().st_mtime_ns and api_path.stat().st_mtime_ns <= output_html.stat().st_mtime_ns
 
+def getCarRoute(projectPath, report):
+    print(projectPath)
+    print(report)
+    projectPath = Path(projectPath)
+    
+    path = []
+    upload = projectPath / "uploads" / report
+    
+    print(upload)
+    if upload.with_suffix(".MOV").is_file(): path = gps_from_mov.extract_mov_gps_points(upload.with_suffix(".MOV"))
+    elif upload.with_suffix(".GPX").is_file(): path = gps_from_mov.extract_mov_gps_points(upload.with_suffix(".GPX"))
+    
+    if path: 
+        return {"source":"route","report":report,"line": [[x["latitude"], x["longitude"]] for x in path][1:-1]}
+    else: return None
+    
 
 #Entry point function: Calling read_csv_input and build_map.
 #Opens the saved detection_map.html when it is already newer than this video's CSV.
-def build_map_from_csv(csv_path, output, selected_classes=None):
-    if not selected_classes and map_html_is_current(csv_path, output):
+def build_map_from_csv(csv_path, api_file, output, selected_classes=None):
+    if not selected_classes and map_html_is_current(csv_path, api_file, output):
+        print('exists')
         return str(output)
 
     points = read_csv_input(csv_path)
+        
+    apiPoints = read_api_csv_input(api_file)
+    
+    route = [getCarRoute(csv_path.parent.parent.parent, csv_path.parent.name)]
+      
+    points = points + apiPoints + route
+                    
     map = build_map(points, output, selected_classes=selected_classes)
-    return map 
+    return map
 
 # References: this script has been written with the help of AI (Cursor)

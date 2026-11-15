@@ -1006,12 +1006,7 @@ def frame_side(x1, x2, frame_width):
     """
     center_x = (x1 + x2) / 2
 
-    if center_x < frame_width / 3:
-        return "left"
-    elif center_x < 2 * frame_width / 3:
-        return "center"
-    else:
-        return "right"
+    return (center_x / (frame_width / 2)) - 1
 
 
 def find_closest_gps_point(target_time, gps_points):

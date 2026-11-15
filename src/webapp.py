@@ -21,6 +21,7 @@ from json import loads
 
 import combined_map
 import geo_mapping
+import locationsa
 
 from detection_settings import show_detection_settings
 from roadsight_paths import (
@@ -731,7 +732,7 @@ def show_all_maps():
     os.makedirs(REPORT_FOLDER, exist_ok=True)
     output_html = os.path.join(REPORT_FOLDER, "all_detections_map.html")
     try:
-        map_path = combined_map.build_map_from_reports(REPORT_FOLDER, output_html)
+        map_path = combined_map.build_map_from_reports(DATA_DIR, output_html)
     except (ValueError, FileNotFoundError) as e:
         raise HTTPException(status_code=404, detail=str(e))
     return FileResponse(
@@ -743,20 +744,36 @@ def show_all_maps():
 
 @app.get("/map/{file_name}")
 def show_one_map(file_name: str):
+    # Reports Folder
     reports_root = Path(REPORT_FOLDER).resolve()
+    
+    # Folder for this particular report
     report_dir = (reports_root / file_name).resolve()
+    
+    # Check this directory actually exists
     if report_dir != reports_root and reports_root not in report_dir.parents:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    # Get the detection CSV file
     csv_file = report_dir / "detection_details_with_gps.csv"
+    # Raise error if the CSV file doesn't exist (Shouldn't ever happen?)
     if not csv_file.is_file():
         raise HTTPException(status_code=404, detail="Report not found")
 
+    # Define the path we're going to put the map
     output_html = report_dir / "detection_map.html"
+    
+    # Create the API report (it may already exist; the function will handle all that)
+    # Pass in the location of where we're working and the filer name
+    api_csv = locationsa.createReadingAPIReport(DATA_DIR,file_name)
+    
+    # Build the map (and catch possible errors)
     try:
-        map_path = geo_mapping.build_map_from_csv(csv_file, output_html)
+        map_path = geo_mapping.build_map_from_csv(csv_file, api_csv, output_html)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    
+    # Open the created map
     return FileResponse(
         map_path,
         media_type="text/html",

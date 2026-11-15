@@ -14,6 +14,7 @@ import locationsa
 
 # GPS detail file written for each processed video.
 DETAILS_CSV_NAME = "detection_details_with_gps.csv"
+API_CSV_NAME = "api_report.csv"
 
 
 # Find reports/<video>/detection_details_with_gps.csv.
@@ -36,20 +37,47 @@ def list_report_csvs(reports_folder):
     csv_paths.sort()
     return csv_paths
 
+def list_reports(folder):
+    reports_folder = Path(folder)
+    
+    if not reports_folder.exists():
+        raise FileNotFoundError(f"Reports folder not found: {reports_folder}")
+
+    try:
+        children = list(reports_folder.iterdir())
+    except PermissionError:
+        raise PermissionError(f"macOS blocked access to {reports_folder}")
+
+    rl = []
+
+    for child in children:
+        csv_path = child / DETAILS_CSV_NAME
+        if child.is_dir() and csv_path.is_file():
+            rl.append(child.name)
+
+    return rl
 
 # True when the saved HTML is newer than every remaining video CSV.
 # No remaining CSV means the saved page is stale, even though nothing is newer than it.
 def combined_map_is_current(reports_folder, output_html):
+    
+    reports_folder = Path(reports_folder)
     output_html = Path(output_html)
-    if not output_html.is_file():
-        return False
-    csv_paths = list_report_csvs(reports_folder)
-    if not csv_paths:
-        return False
+    
+    if not output_html.is_file(): return False
+    
+    reports = list_reports(reports_folder)
+    if not reports: return False
+    
     html_mtime_ns = output_html.stat().st_mtime_ns
-    for csv_path in csv_paths:
-        if csv_path.stat().st_mtime_ns > html_mtime_ns:
-            return False
+    
+    for r in reports:
+        csv = reports_folder / r / DETAILS_CSV_NAME
+        api = reports_folder / r / API_CSV_NAME
+        
+        if csv.stat().st_mtime_ns > html_mtime_ns: return False
+        if api.stat().st_mtime_ns > html_mtime_ns: return False
+        
     return True
 
 
@@ -87,39 +115,83 @@ def attach_cached_snapshots(points, csv_path, reports_folder):
 
 # Read every video CSV into one point list. object_id can repeat, so each point keeps its video name.
 def read_all_report_csvs(reports_folder):
+    
     reports_folder = Path(reports_folder)
-    csv_paths = list_report_csvs(reports_folder)
-    if not csv_paths:
-        raise ValueError("No detection reports found")
+    
+    reports = list_reports(reports_folder)
+    
+    if not reports: raise ValueError("No detection reports found")
 
     points = []
-    for csv_path in csv_paths:
-        video_points = geo_mapping.read_csv_input(csv_path, encode_snapshots=False)
-        points.extend(attach_cached_snapshots(video_points, csv_path, reports_folder))
-        
-    # the below is a temporary proof of concept, to show that we are indeed able to plot API points on the map
-    points = points + locationsa.getRandomStatePoints()
     
-    print(list(points[0]))
+    apipoints = []
+    
+    routes = []
+    
+    for r in reports:
+        csv = reports_folder / r / DETAILS_CSV_NAME
+        api = reports_folder / r / API_CSV_NAME
+        
+        video_points = geo_mapping.read_csv_input(csv, encode_snapshots=False)
+        points.extend(attach_cached_snapshots(video_points, csv, reports_folder))
+        
+        apipoints = apipoints + geo_mapping.read_api_csv_input(api)
+        
+        route = geo_mapping.getCarRoute(csv.parent.parent.parent, csv.parent.name)
+        if route: routes.append(route)
+        
+        
+    apipoints = deconflict(apipoints)
+            
+    if not points and not apipoints: raise ValueError("No data to map, csv file coordinates empty")
+    
+    return points + apipoints + routes
 
-    if not points:
-        raise ValueError("No data to map, csv file coordinates empty")
-    return points
+# get rid of duplicates
+def deconflict(points):
+    seen = set()
+    unique_points = []
+
+    for p in points:
+        object_id = p["object_id"]
+        if object_id not in seen:
+            seen.add(object_id)
+            unique_points.append(p)
+
+    return unique_points
 
 
 # Open the existing combined map, or write a new one.
 # A new HTML file is written only when at least one CSV is newer than the saved map.
 # When no video remains, the saved page is removed so it cannot be opened again.
-def build_map_from_reports(reports_folder, output, selected_classes=None):
-    reports_folder = Path(reports_folder)
+def build_map_from_reports(roadsight, output, selected_classes=None):
+    
+    print(0)
+        
+    # Paths
+    reports_folder = Path(roadsight) / "reports"
     output = Path(output)
-    if not list_report_csvs(reports_folder):
+    
+    reports = list_reports(reports_folder)
+        
+    # do nothing if there are no sub-folders
+    if not reports:
         if output.is_file():
             output.unlink()
         raise ValueError("No detection reports found")
+    
+    # Create API reports, if they don't exist
+    for r in reports:
+        locationsa.createReadingAPIReport(roadsight,r)
+    
+    # do nothing if we're already up to date
     if combined_map_is_current(reports_folder, output):
         return str(output)
+        
+    # get the points
     points = read_all_report_csvs(reports_folder)
+        
+    # build the map
     return geo_mapping.build_map(points, output, selected_classes=selected_classes)
 
 # References: this script has been written with the help of AI (Cursor)
