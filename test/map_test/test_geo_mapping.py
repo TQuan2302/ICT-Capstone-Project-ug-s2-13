@@ -5,7 +5,7 @@ import base64
 import pytest
 
 import geo_mapping
-from helpers import set_file_time, write_gps_csv
+from helpers import set_file_time, write_api_csv, write_gps_csv
 
 # Define a fixed entry for testing
 ONE_DETECTION = ("-34.9285", "138.6007", "speed_limit", "speed_limit_3", "0.8")
@@ -13,12 +13,15 @@ ONE_DETECTION = ("-34.9285", "138.6007", "speed_limit", "speed_limit_3", "0.8")
 
 def make_point(class_name, object_id, latitude=-34.9285, longitude=138.6007):
     return {
+        "source": "detection",
         "latitude": latitude,
         "longitude": longitude,
         "class_name": class_name,
         "object_id": object_id,
         "confidence": "0.8",
         "speed_value": "",
+        "bearing": "",
+        "screen": "",
         "snapshot_data_uri": None,
     }
 
@@ -178,15 +181,17 @@ def test_building_a_map_keeps_only_the_selected_class(tmp_path):
     assert "-34.928500" in html
 
 
-#If the HTML file is newer than the CSV, the old map is opened again.
+#If the HTML file is newer than the CSV and API report, the old map is opened again.
 def test_an_unchanged_video_reuses_its_saved_map(tmp_path):
     csv_path = write_gps_csv(tmp_path / "clip" / "detection_details_with_gps.csv", [ONE_DETECTION])
+    api_path = write_api_csv(tmp_path / "clip" / "api_report.csv")
     saved_map = tmp_path / "clip" / "detection_map.html"
     saved_map.write_text("OLD MAP", encoding="utf-8")
     set_file_time(csv_path, 1_000)
+    set_file_time(api_path, 1_000)
     set_file_time(saved_map, 2_000)
 
-    opened = geo_mapping.build_map_from_csv(csv_path, saved_map)
+    opened = geo_mapping.build_map_from_csv(csv_path, api_path, saved_map)
 
     assert opened == str(saved_map)
     assert saved_map.read_text(encoding="utf-8") == "OLD MAP"
@@ -194,12 +199,14 @@ def test_an_unchanged_video_reuses_its_saved_map(tmp_path):
 #If the report changed after the map was saved, a new HTML file is written.
 def test_a_newer_csv_makes_the_map_again(tmp_path):
     csv_path = write_gps_csv(tmp_path / "clip" / "detection_details_with_gps.csv", [ONE_DETECTION])
+    api_path = write_api_csv(tmp_path / "clip" / "api_report.csv")
     saved_map = tmp_path / "clip" / "detection_map.html"
     saved_map.write_text("OLD MAP", encoding="utf-8")
     set_file_time(saved_map, 1_000)
+    set_file_time(api_path, 1_000)
     set_file_time(csv_path, 2_000)
 
-    geo_mapping.build_map_from_csv(csv_path, saved_map)
+    geo_mapping.build_map_from_csv(csv_path, api_path, saved_map)
 
     html = saved_map.read_text(encoding="utf-8")
     assert "OLD MAP" not in html

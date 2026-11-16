@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
-from helpers import write_gps_csv
+from helpers import write_api_csv, write_gps_csv
 
 ONE_DETECTION = ("-34.9285", "138.6007", "speed_limit", "speed_limit_3", "0.8")
 client = TestClient(webapp.app)
@@ -26,6 +26,8 @@ client = TestClient(webapp.app)
 # Make the map routes read this folder instead of Documents/RoadSight/reports.
 def use_reports_folder(monkeypatch, reports_folder):
     monkeypatch.setattr(webapp, "REPORT_FOLDER", str(reports_folder))
+    # createReadingAPIReport uses DATA_DIR / "reports" / video
+    monkeypatch.setattr(webapp, "DATA_DIR", str(reports_folder.parent))
 
 
 # Folders are listed in name order. A folder with no GPS file is left out.
@@ -93,6 +95,7 @@ def test_a_video_name_cannot_point_outside_the_reports_folder(tmp_path, monkeypa
 def test_opening_a_video_returns_its_map_page(tmp_path, monkeypatch):
     reports = tmp_path / "reports"
     write_gps_csv(reports / "clip" / "detection_details_with_gps.csv", [ONE_DETECTION])
+    write_api_csv(reports / "clip" / "api_report.csv")
     use_reports_folder(monkeypatch, reports)
 
     response = client.get("/map/clip")

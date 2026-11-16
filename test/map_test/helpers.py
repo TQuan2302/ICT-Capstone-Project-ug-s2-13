@@ -5,6 +5,7 @@ from pathlib import Path
 
 # define column for the marker information: lat, long, class name, object id and confidence level
 CSV_HEADER = "camera_latitude,camera_longitude,class_name,object_id,confidence"
+API_CSV_HEADER = "latitude,longitude,class_name,message,object_id"
 
 
 #Function for writing a GPS report. Each row is latitude, longitude, class, id, confidence.
@@ -17,6 +18,18 @@ def write_gps_csv(path, rows):
         lines.append(f"{latitude},{longitude},{class_name},{object_id},{confidence}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+# Write an API report CSV. rows is optional; an empty file still has the header.
+def write_api_csv(path, rows=None):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [API_CSV_HEADER]
+    for latitude, longitude, class_name, message, object_id in rows or []:
+        lines.append(f"{latitude},{longitude},{class_name},{message},{object_id}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
 
 #Set a file's modified time so tests can decide which file is newer. 
 def set_file_time(path, time_ns):

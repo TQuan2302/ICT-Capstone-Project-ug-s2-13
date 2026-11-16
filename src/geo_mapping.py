@@ -469,13 +469,15 @@ def build_map_from_csv(csv_path, api_file, output, selected_classes=None):
         return str(output)
 
     points = read_csv_input(csv_path)
-        
+
     apiPoints = read_api_csv_input(api_file)
-    
-    route = [getCarRoute(csv_path.parent.parent.parent, csv_path.parent.name)]
-      
-    points = points + apiPoints + route
-                    
+
+    route = getCarRoute(csv_path.parent.parent.parent, csv_path.parent.name)
+    if route:
+        points = points + apiPoints + [route]
+    else:
+        points = points + apiPoints
+
     map = build_map(points, output, selected_classes=selected_classes)
     return map
 
