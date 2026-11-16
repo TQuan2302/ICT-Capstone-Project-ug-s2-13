@@ -393,7 +393,7 @@ def build_map(points, output_html, selected_classes=None):
     return str(output_html)
 
 
-def offRoad(p):    
+def offRoad(p):
     ####### Perameters #########
     width = 15
     height = 50
@@ -403,10 +403,14 @@ def offRoad(p):
     ######## Constant ##########
     globeConstant = 111320
     
-    cameraLat = float(p["latitude"])
-    cameraLong = float(p["longitude"])
-    bearing = math.radians(float(p["bearing"]))
-    screenPos = float(p["screen"])
+    # if we don't have the correct kind of screenPos, then give up:    
+    try:    
+        cameraLat = float(p["latitude"])
+        cameraLong = float(p["longitude"])
+        bearing = math.radians(float(p["bearing"]))
+        screenPos = float(p["screen"])
+    except:
+        return [p["latitude"], p["longitude"]] 
     
     # calculate position on arc, from screenPos
     positionOnArc = lowerAngleBound + (screenPos + 1)/2 * (upperAngleBound - lowerAngleBound)
