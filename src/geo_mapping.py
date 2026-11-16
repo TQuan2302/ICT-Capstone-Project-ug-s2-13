@@ -3,6 +3,7 @@ from folium.plugins import FeatureGroupSubGroup, MarkerCluster, GroupedLayerCont
 import csv
 import folium
 import base64
+import math
 
 import locationsa
 import gps_from_gpx
@@ -320,7 +321,11 @@ def build_map(points, output_html, selected_classes=None):
         
         # place marker based on screen position
         loc = [p["latitude"], p["longitude"]]
-        if p["source"] == "detection": loc = offRoad(p)
+        if p["source"] == "detection":
+            print("going off road")
+            print(loc)
+            loc = offRoad(p)
+            print(loc)
         
         # create marker
         class_layer = get_class_layer(p["class_name"], cluster, class_layers, folium_map)
@@ -388,15 +393,39 @@ def build_map(points, output_html, selected_classes=None):
     return str(output_html)
 
 
-def offRoad(p):
-    cameraLat = p["latitude"]
-    cameraLong = p["longitude"]
-    bearing = p["bearing"]
-    screenPos = p["screen"]
+def offRoad(p):    
+    ####### Perameters #########
+    width = 15
+    height = 50
+    lowerAngleBound = -5/12 * math.pi
+    upperAngleBound = 5/12 * math.pi
     
-    print(bearing)
+    ######## Constant ##########
+    globeConstant = 111320
     
-    return [cameraLat, cameraLong]
+    cameraLat = float(p["latitude"])
+    cameraLong = float(p["longitude"])
+    bearing = math.radians(float(p["bearing"]))
+    screenPos = float(p["screen"])
+    
+    # calculate position on arc, from screenPos
+    positionOnArc = lowerAngleBound + (screenPos + 1)/2 * (upperAngleBound - lowerAngleBound)
+
+    # calculate diff in metres from original position
+    deltaX = (width * math.sin(positionOnArc)) * math.cos(bearing) + (height * math.cos(positionOnArc)) * math.sin(bearing)
+    deltaY = -1 * (width * math.sin(positionOnArc)) * math.sin(bearing) + (height * math.cos(positionOnArc)) * math.cos(bearing)
+    
+    # offset the coordinates by our delta
+    # includes conversion from meters to degrees
+    lat_new = cameraLat + (deltaY / globeConstant)
+    long_new = cameraLong + (deltaX / (globeConstant * math.cos(math.radians(cameraLat))))
+    
+    print(deltaX, deltaY)
+    
+    # print([cameraLat, cameraLong])
+    # print([lat_new, long_new])
+    
+    return [lat_new, long_new]
 
 
 # True when this video's saved HTML is newer than its CSV, so nothing needs rebuilding.
