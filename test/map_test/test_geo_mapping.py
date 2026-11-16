@@ -18,6 +18,7 @@ def make_point(class_name, object_id, latitude=-34.9285, longitude=138.6007):
         "class_name": class_name,
         "object_id": object_id,
         "confidence": "0.8",
+        "speed_value": "",
         "snapshot_data_uri": None,
     }
 

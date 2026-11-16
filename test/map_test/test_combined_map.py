@@ -1,5 +1,7 @@
 #Tests for the combined map in src/combined_map.py.
 
+import json
+
 import pytest
 
 import combined_map
@@ -70,18 +72,51 @@ def test_a_saved_combined_map_is_dropped_when_no_video_remains(tmp_path):
     assert saved_map.exists() is False
 
 
-#Test case - Caching: If any video CSV changed, the combined map has to be built again."""
-def test_one_newer_report_makes_the_combined_map_out_of_date(tmp_path):
-    
-    first = write_gps_csv(tmp_path / "a_video" / REPORT_NAME, [ONE_DETECTION])
-    second = write_gps_csv(tmp_path / "b_video" / REPORT_NAME, [ONE_DETECTION])
-    saved_map = tmp_path / "all_detections_map.html"
-    saved_map.write_text("<html></html>", encoding="utf-8")
-    set_file_time(first, 1_000)
-    set_file_time(saved_map, 5_000)
-    set_file_time(second, 9_000)
+# Test case - Caching: If one CSV is newer than the combined HTML, rebuild.
+# After rebuild, the newer video gets a new .map_cache file.
+# The older video already has a matching cache file, so that file stays unchanged.
+def test_one_newer_report_makes_the_combined_map_out_of_date(tmp_path, monkeypatch):
+    monkeypatch.setattr(combined_map.locationsa, "getRandomStatePoints", lambda: [])
 
-    assert combined_map.combined_map_is_current(tmp_path, saved_map) is False
+    old_csv = write_gps_csv(tmp_path / "old_video" / REPORT_NAME, [ONE_DETECTION])
+    new_csv = write_gps_csv(
+        tmp_path / "new_video" / REPORT_NAME,
+        [("-35.1000", "138.8000", "bike_lane", "bike_lane_2", "0.7")],
+    )
+    combined_html = tmp_path / "all_detections_map.html"
+    combined_html.write_text("OLD MAP", encoding="utf-8")
+    set_file_time(old_csv, 1_000)
+    set_file_time(combined_html, 5_000)
+    set_file_time(new_csv, 9_000)
+
+    assert combined_map.combined_map_is_current(tmp_path, combined_html) is False
+
+    # Old video already has a photo cache that matches its CSV time.
+    old_cache = tmp_path / ".map_cache" / "old_video.json"
+    old_cache.parent.mkdir()
+    old_cache.write_text(
+        json.dumps(
+            {
+                "csv_mtime_ns": old_csv.stat().st_mtime_ns,
+                "images": {"speed_limit_id1_last.jpg": "data:image/jpeg;base64,old"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    set_file_time(old_cache, 2_000)
+    old_cache_before = old_cache.read_text(encoding="utf-8")
+    old_cache_mtime = old_cache.stat().st_mtime_ns
+
+    new_cache = tmp_path / ".map_cache" / "new_video.json"
+    assert new_cache.exists() is False
+
+    combined_map.build_map_from_reports(tmp_path, combined_html)
+
+    # Newer video was encoded, so its cache file is created.
+    assert new_cache.is_file()
+    # Older video reused its cache, so that file is unchanged.
+    assert old_cache.read_text(encoding="utf-8") == old_cache_before
+    assert old_cache.stat().st_mtime_ns == old_cache_mtime
 
 
 # Test case - combined map: entries from two different videos are drawn on one map.

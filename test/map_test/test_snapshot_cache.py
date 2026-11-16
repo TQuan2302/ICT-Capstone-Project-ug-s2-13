@@ -1,7 +1,6 @@
 # Tests for the snapshot photo cache in src/snapshot_cache.py.
 
 import json
-
 import snapshot_cache
 
 

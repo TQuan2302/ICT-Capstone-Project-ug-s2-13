@@ -111,3 +111,60 @@ def test_show_all_maps_returns_not_found_when_there_are_no_reports(tmp_path, mon
     response = client.get("/map/all")
 
     assert response.status_code == 404
+
+
+# DELETE /detections/<name> removes the result, report, cache, and combined map,
+# and clears the in-memory status so the entry does not stay marked as done.
+def test_deleting_a_video_removes_its_map_files_and_status(tmp_path, monkeypatch):
+    reports = tmp_path / "reports"
+    results = tmp_path / "results"
+    results.mkdir()
+
+    report_dir = reports / "clip"
+    write_gps_csv(report_dir / "detection_details_with_gps.csv", [ONE_DETECTION])
+    (report_dir / "detection_map.html").write_text("ONE MAP", encoding="utf-8")
+    (report_dir / "snapshots").mkdir()
+    (report_dir / "snapshots" / "speed_limit_id3_last.jpg").write_bytes(b"jpg")
+
+    cache_file = reports / ".map_cache" / "clip.json"
+    cache_file.parent.mkdir(parents=True)
+    cache_file.write_text('{"csv_mtime_ns": 1, "images": {}}', encoding="utf-8")
+
+    combined = reports / "all_detections_map.html"
+    combined.write_text("ALL MAPS", encoding="utf-8")
+
+    result_file = results / "detected_clip.mp4"
+    result_file.write_bytes(b"video")
+    browser_copy = results / "detected_clip.browser.mp4"
+    browser_copy.write_bytes(b"browser")
+
+    use_reports_folder(monkeypatch, reports)
+    monkeypatch.setattr(webapp, "RESULT_FOLDER", str(results))
+    with webapp.detection_queue_lock:
+        webapp.detection_status["clip.mov"] = "done"
+
+    response = client.delete("/detections/clip")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": "clip"}
+    assert result_file.exists() is False
+    assert browser_copy.exists() is False
+    assert report_dir.exists() is False
+    assert cache_file.exists() is False
+    assert combined.exists() is False
+    with webapp.detection_queue_lock:
+        assert "clip.mov" not in webapp.detection_status
+
+
+# A name with nothing left to remove is reported as not found.
+def test_deleting_an_unknown_video_returns_not_found(tmp_path, monkeypatch):
+    reports = tmp_path / "reports"
+    results = tmp_path / "results"
+    reports.mkdir()
+    results.mkdir()
+    use_reports_folder(monkeypatch, reports)
+    monkeypatch.setattr(webapp, "RESULT_FOLDER", str(results))
+
+    response = client.delete("/detections/missing")
+
+    assert response.status_code == 404
