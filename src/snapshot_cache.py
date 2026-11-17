@@ -46,4 +46,4 @@ def images_for_video(reports_folder, video_name, csv_mtime_ns, encode_images):
     save_snapshot_cache(cache_path, csv_mtime_ns, images)
     return images
 
-# this script has been written with the help of AI (Cursor)
+# References:  AI (Cursor) has been used for generating part of the script and suggesting solution

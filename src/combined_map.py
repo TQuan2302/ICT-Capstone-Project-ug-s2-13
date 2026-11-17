@@ -194,4 +194,4 @@ def build_map_from_reports(roadsight, output, selected_classes=None):
     # build the map
     return geo_mapping.build_map(points, output, selected_classes=selected_classes)
 
-# References: this script has been written with the help of AI (Cursor)
+# References:  AI (Cursor) has been used for generating part of the script and suggesting solution
