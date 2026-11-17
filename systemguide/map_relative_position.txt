@@ -1,0 +1,84 @@
+RoadSight Relative Map Position
+============================
+
+What is this system guide about?
+-------------------------------------------------------
+
+"RoadSight" is able to determine the location of a sign relative to the position of the car, and plot the feature with its offset on the map.
+
+
+
+
+
+How does it calculate the offset?
+-------------------------------------------------------
+
+This offset is calculated using an ellipsoid centred about the car. To visualise this, refer to this page:
+
+     https://www.desmos.com/calculator/a2kycx0syd
+
+This DESMOS visualisation contains:
+ 1) The car (light blue dot) which can be dragged around
+ 2) The car's bearing (red dot) which can be dragged to point the car in different ways
+ 3) The relevant ellipsoid upon which points are projected (shown as a light blue oval)
+ 4) The projection from the car to the ellipsoid (purple line and cross)
+
+The relevant parameters are:
+ 1) w and h, controlling the width and height of the ellipsoid in METRES.
+ 2) l and u, controlling the minimum and maximum angle around the ellipse that the projection can visit. For instance, if a sign is on the very left of the screen, the projection will be l radians around the oval. If the sign is in the middle of the screen, the projection will be hallway between l and u radians around the oval.
+ 3) s is the position on screen, from -1 to 1. In the code, this is how screen position is measured.
+
+
+
+
+
+Conversion from Metres to Latitude/ Longitude
+-------------------------------------------------------
+
+One aspect the DESMOS visualisation does not cover is the conversion from METRES to a LAT/LONG coordinate. The following lines handle this conversion:
+
+    globeConstant = 111320
+    lat_new = cameraLat + (deltaY / globeConstant)
+    long_new = cameraLong + (deltaX / (globeConstant * math.cos(math.radians(cameraLat))))
+
+This constant simply converts the units. Note we use cosine for longitudinal conversion because of the decreasing distance between longitudinal degrees as you get further from the equator. More information about this is readily available online. For now you can trust that this is right!
+
+
+
+
+
+Where are these functions in the system?
+-------------------------------------------------------
+
+We are concerned with the following python scripts
+
+
+## detect.py ##
+ -> process_video()   is where the video's CSV file is created, containing all the detections
+ -> frame_side()    takes the screen coorindate and returns a -1 to 1 map
+
+## GPS.py ##
+ ->calculate_track()   returns the bearing at a specific point, based on two pairs of coordinates (used to calculate the bearings of the vehicle at detections)
+
+
+At this stage, the CSV file will be created. For more information about how the map processes this, see map_overview.txt
+
+
+## geo_mapping.py ##
+ -> build_map()    as described in map_overview.txt, this function creates the map given a list of points in JSON format.
+ -> offRoad()    is called by build_map() when it tries to plot a detection point. This function simply applies the formula described above in the DESMOS visualisation
+
+
+
+
+
+What can be implemented next?
+-------------------------------------------------------
+
+The offRoad() function has been designed to aid in your future development. It has the screen position and bearing, which are the two pieces of information needed to control how exactly a point is offset from the camera.
+
+My ellipsoid model is quite simple, perhaps you could work something out to do with the lens information of the camera? I'll leave that up to you.
+
+If you have any questions feel free to email me at jai.matthews2005@gmail.com 
+
+Also, I would be genuinely really interested to know if/how you expand upon this feature. I hope you reach out and share any work on this feature.
